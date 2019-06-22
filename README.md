@@ -36,11 +36,11 @@ It is also actively used by Computational Biology of Aging Group and BGI Genomic
 BitMapper can be run as binary or as a docker container. For example, if we assume that reference genomes and samples are in /data/indexes and /data/samples folders, then:
 * to build index of the reference genome:
 ```
-docker run -v /data:/data quay.io/comp-bio-aging/bit_mapper_bs:latest /opt/BitMapperBS/bitmapperBS --index /data/indexes/HUMAN/29/GRCh38.primary_assembly.genome.fa  --index_folder human_bs_index
+docker run -v /data:/data quay.io/comp-bio-aging/bit_mapper_bs:master /opt/BitMapperBS/bitmapperBS --index /data/indexes/HUMAN/29/GRCh38.primary_assembly.genome.fa  --index_folder human_bs_index
 ```
 * to align sequence to bitmapper index:
 ```
-docker run -v /data:/data quay.io/comp-bio-aging/bit_mapper_bs:latest /opt/BitMapperBS/bitmapperBS --search /data/indexes/human_bs_index  --seq1 /data/samples/SRR948855/SRR948855_1.fastq.gz --seq2 /data/samples/SRR948855/SRR948855_2.fastq.gz --sensitive --pe -t 8 --mapstats --bam -o SRR948855.bam
+docker run -v /data:/data quay.io/comp-bio-aging/bit_mapper_bs:master /opt/BitMapperBS/bitmapperBS --search /data/indexes/human_bs_index  --seq1 /data/samples/SRR948855/SRR948855_1.fastq.gz --seq2 /data/samples/SRR948855/SRR948855_2.fastq.gz --sensitive --pe -t 8 --mapstats --bam -o SRR948855.bam
 ```
 
 ### Installation ###
