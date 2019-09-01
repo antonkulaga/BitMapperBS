@@ -27,6 +27,7 @@
 #include "Process_sam_out.h"
 #include "Levenshtein_Cal.h"
 #include "SAM_queue.h"
+#include "ksw.h"
 
 #include "Ref_Genome.h"
 #include "bam_prase.h"
@@ -57,10 +58,30 @@ char char_to_3bit[128] = {
 };
 
 
+int8_t mat[25] = {
+	0, -1, -1, -1, -1,
+	-1, 0, -1, -1, -1,
+	-1, -1, 0, -1, -1,
+	-1, 0, -1, 0, -1,
+	-1, -1, -1, -1, -1
+};
+
+int8_t mat_diff[25] = {
+	0, -1, -1, -1, -1,
+	-1, 0, -1, -1, -1,
+	-1, -1, 0, -1, -1,
+	-1, 0, -1, 0, -1,
+	-1, -1, -1, -1, -1
+};
+
+
+
+
+
 _rg_name_l  *_ih_refGenName;
 int refChromeCont;
 
-char *versionN = "1.0.1.4";
+char *versionN = "1.0.2.1";
 long long mappingCnt[MAX_Thread];
 unsigned int done;
 long long mappedSeqCnt[MAX_Thread];
@@ -142,6 +163,247 @@ Methylation_Output methy_out;
 
 
 ///bitmapper_bs_iter debug_pos;
+
+
+inline int MAP_Calculation(unsigned int second_best_diff, unsigned int error_threshold,
+int best_score,int GapOpenPenalty, int GapExtensionPenalty, int MistMatchPenaltyMax)
+{
+
+	int scoreMax = GapOpenPenalty + GapExtensionPenalty;
+	if(scoreMax < MistMatchPenaltyMax)
+	{
+		scoreMax = MistMatchPenaltyMax;
+	}
+	///scoreMax < 0, is a negative number
+	scoreMax = -scoreMax * error_threshold;
+
+	///the max score and min score are 0 and scoreMax, respectively
+	///and scoreMax is a negative number
+	///thus scoreMaxRange = -scoreMax
+	int scoreMaxRange = -scoreMax;
+	///both best_score and scoreMax are negative numbers
+	int score_diff = best_score - scoreMax;
+	if(score_diff < 0)
+	{
+		fprintf(stderr, "error best_score: %d, scoreMax: %d\n", best_score, scoreMax);
+		score_diff = 0;
+	}
+	int error_diff = second_best_diff;
+	///only one alignment
+	///in this case, second_best_diff is very large
+	if(second_best_diff > error_threshold)
+	{
+		error_diff = error_threshold + 1;
+	}
+
+	double rank;
+	double rank_error;
+
+	///only one alignment
+	if(error_diff > error_threshold)
+	{
+		rank = (double)((double)score_diff/(double)scoreMaxRange);
+		if(rank >= 0.8)
+		{
+			return 42;
+		}
+		else if(rank >= 0.7)
+		{
+			return 40;
+		}
+		else if(rank >= 0.6)
+		{
+			return 24;
+		}
+		else if(rank >= 0.5)
+		{
+			return 23;
+		}
+		else if(rank >= 0.4)
+		{
+			return 8;
+		}
+		else if(rank >= 0.3)
+		{
+			return 3;
+		}
+		else
+		{
+			return 0;
+		}
+		
+	}
+	else
+	{
+		rank_error = (double)((double)error_diff / (double)error_threshold);
+		rank = (double)((double)score_diff/(double)scoreMaxRange);
+
+		if(rank_error >= 0.9)
+		{
+			if(best_score == 0)
+			{
+				return 39;
+			}
+			else
+			{
+				return 33;
+			}
+		}
+		else if(rank_error >= 0.8)
+		{
+			if(best_score == 0)
+			{
+				return 38;
+			}
+			else
+			{
+				return 27;
+			}
+		}
+		else if(rank_error >= 0.7)
+		{
+			if(best_score == 0)
+			{
+				return 37;
+			}
+			else
+			{
+				return 26;
+			}
+		}
+		else if(rank_error >= 0.6)
+		{
+			if(best_score == 0)
+			{
+				return 36;
+			}
+			else
+			{
+				return 22;
+			}
+		}
+		else if(rank_error >= 0.5)
+		{
+			if(best_score == 0)
+			{
+				return 35;
+			}
+			else if(rank >= 0.84)
+			{
+				return 25;
+			}
+			else if(rank >= 0.68)
+			{
+				return 16;
+			}
+			else
+			{
+				return 5;
+			}
+		}
+		else if(rank_error >= 0.4)
+		{
+			if(best_score == 0)
+			{
+				return 34;
+			}
+			else if(rank >= 0.84)
+			{
+				return 21;
+			}
+			else if(rank >= 0.68)
+			{
+				return 14;
+			}
+			else
+			{
+				return 4;
+			}
+		}
+		else if(rank_error >= 0.3)
+		{
+			if(best_score == 0)
+			{
+				return 32;
+			}
+			else if(rank >= 0.88)
+			{
+				return 18;
+			}
+			else if(rank >= 0.67)
+			{
+				return 15;
+			}
+			else
+			{
+				return 3;
+			}
+		}
+		else if(rank_error >= 0.2)
+		{
+			if(best_score == 0)
+			{
+				return 31;
+			}
+			else if(rank >= 0.88)
+			{
+				return 17;
+			}
+			else if(rank >= 0.67)
+			{
+				return 11;
+			}
+			else
+			{
+				return 0;
+			}
+		}
+		else if(rank_error >= 0.1)
+		{
+			if(best_score == 0)
+			{
+				return 30;
+			}
+			else if(rank >= 0.88)
+			{
+				return 12;
+			}
+			else if(rank >= 0.67)
+			{
+				return 7;
+			}
+			else
+			{
+				return 0;
+			}
+		}
+		else if(error_diff == 0)
+		{
+			if(rank >= 0.67)
+			{
+				return 1;
+			}
+			else
+			{
+				return 0;
+			}
+		}
+		else
+		{
+			if(rank >= 0.67)
+			{
+				return 6;
+			}
+			else
+			{
+				return 2;
+			}
+		}
+	}
+
+
+}
+
 
 
 
@@ -229,22 +491,6 @@ void out_paired_distance_statistic()
 	fprintf(stderr, "@%llu\t%llu\n", maxDistance_pair, minDistance_pair);
 
 
-	/**
-	int j;
-	long long tmp = 0;
-	for (j = 0; j < genome_cuts; j++)
-	{
-		int k = 0;
-
-		for (k = 0; k < length; k++)
-		{
-			fprintf(stderr, "%llu\t", PE_distance[0].count[j][k]);
-		}
-
-		fprintf(stderr, "\n\n");
-	}
-	**/
-
 	pair_distance_result sort_results;
 	sort_results.count = (pe_distance_info*)malloc(sizeof(pe_distance_info)*length);
 
@@ -263,10 +509,6 @@ void out_paired_distance_statistic()
 				tmp = tmp + PE_distance[i].count[j][k];
 			}
 
-			/**
-			PE_distance[0].count[j][k] = tmp;
-			fprintf(stderr, "%llu\t", PE_distance[0].count[j][k]);
-			**/
 
 			sort_results.count[k].count = tmp;
 			sort_results.count[k].index = k;
@@ -283,8 +525,6 @@ void out_paired_distance_statistic()
 		for (k = 0; k < length; k++)
 		{
 			total_frequence += sort_results.count[k].count;
-			
-			////fprintf(stderr, "%llu:%llu\t", sort_results.count[k].count, sort_results.count[k].index);
 		}
 
 		double current_frequence = 0;
@@ -304,7 +544,6 @@ void out_paired_distance_statistic()
 				fprintf(stderr, "%.2f, %lld, %llu\t", prec, (long long)current_frequence, k);
 			}
 
-			////fprintf(stderr, "%llu:%llu\t", sort_results.count[k].count, sort_results.count[k].index);
 		}
 
 		fprintf(stderr, "\n\n");
@@ -554,7 +793,7 @@ void Prepare_alignment(char* outputFileName, char *genFileName, _rg_name_l *chhy
 		}
 
 		///genome_cuts = 64;
-		fprintf(stdout, "genome_cuts: %d\n", genome_cuts);
+		fprintf(stderr, "genome_cuts: %d\n", genome_cuts);
 
 		///cut_length = (_msf_refGenLength * 2) / genome_cuts;
 		cut_length = _msf_refGenLength / genome_cuts;
@@ -564,6 +803,7 @@ void Prepare_alignment(char* outputFileName, char *genFileName, _rg_name_l *chhy
 			cut_length = cut_length + 1;
 		}
 
+		///outputFileName一定是bmm_folder/output
 		open_methy_output(&methy_out, outputFileName, cut_length);
 
 
@@ -576,6 +816,55 @@ void Prepare_alignment(char* outputFileName, char *genFileName, _rg_name_l *chhy
 	}
 
 	///exit(0);
+
+	/**
+	int8_t mat[25] = {
+	0, -1, -1, -1, -1,
+	-1, 0, -1, -1, -1,
+	-1, -1, 0, -1, -1,
+	-1, 0, -1, 0, -1,
+	-1, -1, -1, -1, -1
+	};
+	**/
+	
+	int j, k;
+	for (i = k = 0; i < 4; ++i) {
+		for (j = 0; j < 4; ++j)
+		{
+			mat_diff[k] = i == j? 0 : (MistMatchPenaltyMax - MistMatchPenaltyMin);
+			mat[k++] = i == j? 0 : -MistMatchPenaltyMin;
+		}
+		
+		mat_diff[k] = 0;
+		mat[k++] = -N_Penalty; // ambiguous base
+	}
+
+	
+	for (j = 0; j < 5; ++j) 
+	{
+		mat_diff[k] = 0;
+		mat[k++] = -N_Penalty;
+	}
+
+	mat_diff[16] = 0;
+	mat[16] = 0;
+	
+	/**
+	fprintf(stderr, "mat: ");
+	for (i = 0; i < 25; i++)
+	{
+		fprintf(stderr, "%d, ", mat[i]);
+	}
+
+
+	fprintf(stderr, "\nmat_diff: ");
+	for (i = 0; i < 25; i++)
+	{
+		fprintf(stderr, "%d, ", mat_diff[i]);
+	}
+	**/
+	
+	
 
 }
 
@@ -3331,11 +3620,6 @@ void* process_PE_methy_alignment_multiple_threads(void* arg)
 		pthread_mutex_unlock(&methy_input_buffer.process_Mutex[thread_id]);
 	}
 
-
-
-
-
-	///fprintf(stdout, "thread %d (methy) has been completed\n", thread_id);
 }
 
 
@@ -3429,10 +3713,6 @@ void* process_single_methy_alignment_multiple_threads(void* arg)
 	}
 
 
-
-
-
-	///fprintf(stdout, "thread %d (methy) has been completed\n", thread_id);
 }
 
 
@@ -3731,9 +4011,9 @@ void methy_extract_PE_mutiple_thread(int thread_id, char* file_name, int PE_dist
 
 	
 
-	fprintf(stdout, "load_time: %f\n", load_time);
-	fprintf(stdout, "print_time: %f\n", print_time);
-	fprintf(stdout, "update_methy_time: %f\n", update_methy_time);
+	fprintf(stderr, "load_time: %f\n", load_time);
+	fprintf(stderr, "print_time: %f\n", print_time);
+	fprintf(stderr, "update_methy_time: %f\n", update_methy_time);
 
 	
 
@@ -3938,9 +4218,9 @@ void methy_extract_PE(int thread_id, char* file_name, int PE_distance, int* need
 	fprintf(stderr, "unique_read: %lld\n", unique_read);
 	fprintf(stderr, "abnormal_read: %lld\n", abnormal_read);
 
-	fprintf(stdout, "load_time: %f\n", load_time);
-	fprintf(stdout, "update_methylation_time: %f\n", update_methylation_time);
-	fprintf(stdout, "print_time: %f\n", print_time);
+	fprintf(stderr, "load_time: %f\n", load_time);
+	fprintf(stderr, "update_methylation_time: %f\n", update_methylation_time);
+	fprintf(stderr, "print_time: %f\n", print_time);
 	
 	
 	
@@ -4211,9 +4491,9 @@ void methy_extract_mutiple_thread(int thread_id, char* file_name, int* need_cont
 
 
 
-	fprintf(stdout, "load_time: %f\n", load_time);
-	fprintf(stdout, "print_time: %f\n", print_time);
-	fprintf(stdout, "update_methy_time: %f\n", update_methy_time);
+	fprintf(stderr, "load_time: %f\n", load_time);
+	fprintf(stderr, "print_time: %f\n", print_time);
+	fprintf(stderr, "update_methy_time: %f\n", update_methy_time);
 
 
 
@@ -4843,8 +5123,9 @@ inline void get_actuall_rc_genome(char* tmp_ref, bitmapper_bs_iter rc_start_site
 inline void map_candidate_votes_mutiple_cut_end_to_end_4_sse(
 	seed_votes* candidate_votes, bitmapper_bs_iter* candidate_votes_length,
 	bitmapper_bs_iter read_length, bitmapper_bs_iter error_threshold,
-	char* tmp_ref, char* read, __m128i* Peq_SSE, unsigned int* min_err, int* min_err_index)
+	char* tmp_ref, char* read, __m128i* Peq_SSE, unsigned int* min_err, int* min_err_index, unsigned int* second_best_diff)
 {
+	
 	bitmapper_bs_iter i = 0;
 	bitmapper_bs_iter t_length = read_length;
 	bitmapper_bs_iter p_length = read_length + 2 * error_threshold;
@@ -4918,8 +5199,6 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_4_sse(
 
 
 
-
-
 		BS_Reserve_Banded_BPM_4_SSE_only(t[0], t[1], t[2], t[3], p_length, read, t_length,
 			return_sites, return_sites_error, error_threshold, Peq_SSE);
 
@@ -4944,11 +5223,15 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_4_sse(
 			&&
 			(*min_err_index) >= 0)
 		{
+			(*second_best_diff) = 0;
+
 			(*min_err_index) = -2 - (*min_err_index);
 			///(*min_err_index) = -2;
 		}
 		else if (return_sites_error[0]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[0];
+
 			(*min_err) = return_sites_error[0];
 			(*min_err_index) = i;
 			min_err_site = tmp_min_err_site;
@@ -4963,11 +5246,15 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_4_sse(
 			&&
 			(*min_err_index) >= 0)
 		{
+			(*second_best_diff) = 0;
+
 			(*min_err_index) = -2 - (*min_err_index);
 			///(*min_err_index) = -2;
 		}
 		else if (return_sites_error[1]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[1];
+
 			(*min_err) = return_sites_error[1];
 			(*min_err_index) = i + 1;
 			min_err_site = tmp_min_err_site;
@@ -4983,11 +5270,15 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_4_sse(
 			&&
 			(*min_err_index) >= 0)
 		{
+			(*second_best_diff) = 0;
+
 			(*min_err_index) = -2 - (*min_err_index);
 			///(*min_err_index) = -2;
 		}
 		else if (return_sites_error[2]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[2];
+
 			(*min_err) = return_sites_error[2];
 			(*min_err_index) = i + 2;
 			min_err_site = tmp_min_err_site;
@@ -5003,11 +5294,15 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_4_sse(
 			&&
 			(*min_err_index) >= 0)
 		{
+			(*second_best_diff) = 0;
+
 			(*min_err_index) = -2 - (*min_err_index);
 			///(*min_err_index) = -2;
 		}
 		else if (return_sites_error[3]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[3];
+
 			(*min_err) = return_sites_error[3];
 			(*min_err_index) = i + 3;
 			min_err_site = tmp_min_err_site;
@@ -5059,11 +5354,15 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_4_sse(
 			&&
 			(*min_err_index) >= 0)
 		{
+			(*second_best_diff) = 0;
+
 			(*min_err_index) = -2 - (*min_err_index);
 			///(*min_err_index) = -2;
 		}
 		else if (candidate_votes[i].err < (*min_err))
 		{
+			(*second_best_diff) = (*min_err) - candidate_votes[i].err;
+
 			(*min_err) = candidate_votes[i].err;
 			(*min_err_index) = i;
 			min_err_site = tmp_min_err_site;
@@ -5095,11 +5394,15 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_4_sse(
 				&&
 				(*min_err_index) >= 0)
 			{
+				(*second_best_diff) = 0;
+
 				(*min_err_index) = -2 - (*min_err_index);
 				///(*min_err_index) = -2;
 			}
 			else if (return_sites_error[inner_i]<(*min_err))
 			{
+				(*second_best_diff) = (*min_err) - return_sites_error[inner_i];
+
 				(*min_err) = return_sites_error[inner_i];
 				(*min_err_index) = i + inner_i;
 				min_err_site = tmp_min_err_site;
@@ -5118,13 +5421,21 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_4_sse(
 		candidate_votes[0].site = candidate_votes[(*min_err_index)].site;
 	}
 
+	/**
+	if((*second_best_diff) > error_threshold)
+	{
+		(*second_best_diff) = - 2;
+	}
+	**/
+	
+
 
 }
 
 inline void map_candidate_votes_mutiple_cut_end_to_end_2_sse(
 	seed_votes* candidate_votes, bitmapper_bs_iter* candidate_votes_length,
 	bitmapper_bs_iter read_length, bitmapper_bs_iter error_threshold,
-	char* tmp_ref, char* read, __m128i* Peq_SSE, unsigned int* min_err, int* min_err_index)
+	char* tmp_ref, char* read, __m128i* Peq_SSE, unsigned int* min_err, int* min_err_index, unsigned int* second_best_diff)
 {
 	bitmapper_bs_iter i = 0;
 	bitmapper_bs_iter t_length = read_length;
@@ -5199,11 +5510,15 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_2_sse(
 			&&
 			(*min_err_index) >= 0)
 		{
+			(*second_best_diff) = 0;
+
 			(*min_err_index) = -2 - (*min_err_index);
 			///(*min_err_index) = -2;
 		}
 		else if (return_sites_error[0]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[0];
+
 			(*min_err) = return_sites_error[0];
 			(*min_err_index) = i;
 			min_err_site = tmp_min_err_site;
@@ -5218,11 +5533,15 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_2_sse(
 			&&
 			(*min_err_index) >= 0)
 		{
+			(*second_best_diff) = 0;
+
 			(*min_err_index) = -2 - (*min_err_index);
 			///(*min_err_index) = -2;
 		}
 		else if (return_sites_error[1]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[1];
+
 			(*min_err) = return_sites_error[1];
 			(*min_err_index) = i + 1;
 			min_err_site = tmp_min_err_site;
@@ -5272,11 +5591,15 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_2_sse(
 			&&
 			(*min_err_index) >= 0)
 		{
+			(*second_best_diff) = 0;
+
 			(*min_err_index) = -2 - (*min_err_index);
 			///(*min_err_index) = -2;
 		}
 		else if (candidate_votes[i].err < (*min_err))
 		{
+			(*second_best_diff) = (*min_err) - candidate_votes[i].err;
+
 			(*min_err) = candidate_votes[i].err;
 			(*min_err_index) = i;
 			min_err_site = tmp_min_err_site;
@@ -5308,11 +5631,15 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_2_sse(
 				&&
 				(*min_err_index) >= 0)
 			{
+				(*second_best_diff) = 0;
+
 				(*min_err_index) = -2 - (*min_err_index);
 				///(*min_err_index) = -2;
 			}
 			else if (return_sites_error[inner_i]<(*min_err))
 			{
+				(*second_best_diff) = (*min_err) - return_sites_error[inner_i];
+
 				(*min_err) = return_sites_error[inner_i];
 				(*min_err_index) = i + inner_i;
 				min_err_site = tmp_min_err_site;
@@ -5330,6 +5657,13 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_2_sse(
 		candidate_votes[0].end_site = candidate_votes[(*min_err_index)].end_site;
 		candidate_votes[0].site = candidate_votes[(*min_err_index)].site;
 	}
+
+	/**
+	if((*second_best_diff) > error_threshold)
+	{
+		(*second_best_diff) = - 2;
+	}
+	**/
 
 
 }
@@ -5781,7 +6115,7 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_2_for_paired_end_sse(
 inline int map_candidate_votes_mutiple_end_to_end_4_sse(
 	seed_votes* candidate_votes, bitmapper_bs_iter* candidate_votes_length,
 	bitmapper_bs_iter read_length, bitmapper_bs_iter error_threshold,
-	char* tmp_ref, char* read, __m128i* Peq_SSE, unsigned int* min_err, int* min_err_index)
+	char* tmp_ref, char* read, __m128i* Peq_SSE, unsigned int* min_err, int* min_err_index, unsigned int* second_best_diff)
 {
 	bitmapper_bs_iter i = 0;
 	bitmapper_bs_iter t_length = read_length;
@@ -5879,6 +6213,8 @@ inline int map_candidate_votes_mutiple_end_to_end_4_sse(
 			&&
 			min_err_site != tmp_min_err_site)
 		{
+			(*second_best_diff) = 0;
+
 			if ((*min_err_index) >= 0)
 			{
 				(*min_err_index) = -2 - (*min_err_index);
@@ -5892,6 +6228,8 @@ inline int map_candidate_votes_mutiple_end_to_end_4_sse(
 		}
 		else if (return_sites_error[0]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[0];
+
 			(*min_err) = return_sites_error[0];
 			(*min_err_index) = i;
 			min_err_site = tmp_min_err_site;
@@ -5906,6 +6244,8 @@ inline int map_candidate_votes_mutiple_end_to_end_4_sse(
 			&&
 			min_err_site != tmp_min_err_site)
 		{
+			(*second_best_diff) = 0;
+
 			if ((*min_err_index) >= 0)
 			{
 				(*min_err_index) = -2 - (*min_err_index);
@@ -5919,6 +6259,8 @@ inline int map_candidate_votes_mutiple_end_to_end_4_sse(
 		}
 		else if (return_sites_error[1]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[1];
+
 			(*min_err) = return_sites_error[1];
 			(*min_err_index) = i + 1;
 			min_err_site = tmp_min_err_site;
@@ -5933,6 +6275,8 @@ inline int map_candidate_votes_mutiple_end_to_end_4_sse(
 			&&
 			min_err_site != tmp_min_err_site)
 		{
+			(*second_best_diff) = 0;
+
 			if ((*min_err_index) >= 0)
 			{
 				(*min_err_index) = -2 - (*min_err_index);
@@ -5946,6 +6290,8 @@ inline int map_candidate_votes_mutiple_end_to_end_4_sse(
 		}
 		else if (return_sites_error[2]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[2];
+
 			(*min_err) = return_sites_error[2];
 			(*min_err_index) = i + 2;
 			min_err_site = tmp_min_err_site;
@@ -5959,6 +6305,8 @@ inline int map_candidate_votes_mutiple_end_to_end_4_sse(
 			&&
 			min_err_site != tmp_min_err_site)
 		{
+			(*second_best_diff) = 0;
+
 			if ((*min_err_index) >= 0)
 			{
 				(*min_err_index) = -2 - (*min_err_index);
@@ -5972,6 +6320,8 @@ inline int map_candidate_votes_mutiple_end_to_end_4_sse(
 		}
 		else if (return_sites_error[3]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[3];
+
 			(*min_err) = return_sites_error[3];
 			(*min_err_index) = i + 3;
 			min_err_site = tmp_min_err_site;
@@ -6015,6 +6365,8 @@ inline int map_candidate_votes_mutiple_end_to_end_4_sse(
 			&&
 			min_err_site != tmp_min_err_site)
 		{
+			(*second_best_diff) = 0;
+
 			if ((*min_err_index) >= 0)
 			{
 				(*min_err_index) = -2 - (*min_err_index);
@@ -6027,6 +6379,8 @@ inline int map_candidate_votes_mutiple_end_to_end_4_sse(
 		}
 		else if (candidate_votes[i].err < (*min_err))
 		{
+			(*second_best_diff) = (*min_err) - candidate_votes[i].err;
+
 			(*min_err) = candidate_votes[i].err;
 			(*min_err_index) = i;
 			min_err_site = tmp_min_err_site;
@@ -6057,6 +6411,8 @@ inline int map_candidate_votes_mutiple_end_to_end_4_sse(
 				&&
 				min_err_site != tmp_min_err_site)
 			{
+				(*second_best_diff) = 0;
+
 				if ((*min_err_index) >= 0)
 				{
 					(*min_err_index) = -2 - (*min_err_index);
@@ -6069,6 +6425,8 @@ inline int map_candidate_votes_mutiple_end_to_end_4_sse(
 			}
 			else if (return_sites_error[inner_i]<(*min_err))
 			{
+				(*second_best_diff) = (*min_err) - return_sites_error[inner_i];
+
 				(*min_err) = return_sites_error[inner_i];
 				(*min_err_index) = i + inner_i;
 				min_err_site = tmp_min_err_site;
@@ -6088,6 +6446,13 @@ inline int map_candidate_votes_mutiple_end_to_end_4_sse(
 		candidate_votes[0].site = candidate_votes[(*min_err_index)].site;
 	}
 
+	/**
+	if((*second_best_diff) > error_threshold)
+	{
+		(*second_best_diff) = - 2;
+	}
+	**/
+
 
 	return 1;
 
@@ -6099,7 +6464,7 @@ inline int map_candidate_votes_mutiple_end_to_end_4_sse(
 inline int map_candidate_votes_mutiple_end_to_end_2_sse(
 	seed_votes* candidate_votes, bitmapper_bs_iter* candidate_votes_length,
 	bitmapper_bs_iter read_length, bitmapper_bs_iter error_threshold,
-	char* tmp_ref, char* read, __m128i* Peq_SSE, unsigned int* min_err, int* min_err_index)
+	char* tmp_ref, char* read, __m128i* Peq_SSE, unsigned int* min_err, int* min_err_index, unsigned int* second_best_diff)
 {
 	bitmapper_bs_iter i = 0;
 	bitmapper_bs_iter t_length = read_length;
@@ -6171,6 +6536,8 @@ inline int map_candidate_votes_mutiple_end_to_end_2_sse(
 			&&
 			min_err_site != tmp_min_err_site)
 		{
+			(*second_best_diff) = 0;
+
 			if ((*min_err_index) >= 0)
 			{
 				(*min_err_index) = -2 - (*min_err_index);
@@ -6184,6 +6551,8 @@ inline int map_candidate_votes_mutiple_end_to_end_2_sse(
 		}
 		else if (return_sites_error[0]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[0];
+
 			(*min_err) = return_sites_error[0];
 			(*min_err_index) = i;
 			min_err_site = tmp_min_err_site;
@@ -6198,6 +6567,8 @@ inline int map_candidate_votes_mutiple_end_to_end_2_sse(
 			&&
 			min_err_site != tmp_min_err_site)
 		{
+			(*second_best_diff) = 0;
+
 			if ((*min_err_index) >= 0)
 			{
 				(*min_err_index) = -2 - (*min_err_index);
@@ -6211,6 +6582,8 @@ inline int map_candidate_votes_mutiple_end_to_end_2_sse(
 		}
 		else if (return_sites_error[1]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[1];
+
 			(*min_err) = return_sites_error[1];
 			(*min_err_index) = i + 1;
 			min_err_site = tmp_min_err_site;
@@ -6254,6 +6627,8 @@ inline int map_candidate_votes_mutiple_end_to_end_2_sse(
 			&&
 			min_err_site != tmp_min_err_site)
 		{
+			(*second_best_diff) = 0;
+
 			if ((*min_err_index) >= 0)
 			{
 				(*min_err_index) = -2 - (*min_err_index);
@@ -6266,6 +6641,8 @@ inline int map_candidate_votes_mutiple_end_to_end_2_sse(
 		}
 		else if (candidate_votes[i].err < (*min_err))
 		{
+			(*second_best_diff) = (*min_err) - candidate_votes[i].err;
+
 			(*min_err) = candidate_votes[i].err;
 			(*min_err_index) = i;
 			min_err_site = tmp_min_err_site;
@@ -6296,6 +6673,8 @@ inline int map_candidate_votes_mutiple_end_to_end_2_sse(
 				&&
 				min_err_site != tmp_min_err_site)
 			{
+				(*second_best_diff) = 0;
+
 				if ((*min_err_index) >= 0)
 				{
 					(*min_err_index) = -2 - (*min_err_index);
@@ -6308,6 +6687,8 @@ inline int map_candidate_votes_mutiple_end_to_end_2_sse(
 			}
 			else if (return_sites_error[inner_i]<(*min_err))
 			{
+				(*second_best_diff) = (*min_err) - return_sites_error[inner_i];
+
 				(*min_err) = return_sites_error[inner_i];
 				(*min_err_index) = i + inner_i;
 				min_err_site = tmp_min_err_site;
@@ -6326,6 +6707,12 @@ inline int map_candidate_votes_mutiple_end_to_end_2_sse(
 		candidate_votes[0].end_site = candidate_votes[(*min_err_index)].end_site;
 		candidate_votes[0].site = candidate_votes[(*min_err_index)].site;
 	}
+	/**
+	if((*second_best_diff) > error_threshold)
+	{
+		(*second_best_diff) = - 2;
+	}
+	**/
 
 
 	return 1;
@@ -6353,7 +6740,7 @@ inline int map_candidate_votes_mutiple_end_to_end_2_sse(
 inline void map_candidate_votes_mutiple_cut_end_to_end_4(
 	seed_votes* candidate_votes, bitmapper_bs_iter* candidate_votes_length,
 	bitmapper_bs_iter read_length, bitmapper_bs_iter error_threshold,
-	char* tmp_ref, char* read, __m256i* Peq_SSE, unsigned int* min_err, int* min_err_index)
+	char* tmp_ref, char* read, __m256i* Peq_SSE, unsigned int* min_err, int* min_err_index, unsigned int* second_best_diff)
 {
 	bitmapper_bs_iter i = 0;
 	bitmapper_bs_iter t_length = read_length;
@@ -6455,11 +6842,15 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_4(
 			&&
 			(*min_err_index) >= 0)
 		{
+			(*second_best_diff) = 0;
+
 			(*min_err_index) = -2 - (*min_err_index);
 			///(*min_err_index) = -2;
 		}
 		else if (return_sites_error[0]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[0];
+
 			(*min_err) = return_sites_error[0];
 			(*min_err_index) = i;
 			min_err_site = tmp_min_err_site;
@@ -6474,11 +6865,15 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_4(
 			&&
 			(*min_err_index) >= 0)
 		{
+			(*second_best_diff) = 0;
+
 			(*min_err_index) = -2 - (*min_err_index);
 			///(*min_err_index) = -2;
 		}
 		else if (return_sites_error[1]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[1];
+
 			(*min_err) = return_sites_error[1];
 			(*min_err_index) = i + 1;
 			min_err_site = tmp_min_err_site;
@@ -6494,11 +6889,15 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_4(
 			&&
 			(*min_err_index) >= 0)
 		{
+			(*second_best_diff) = 0;
+
 			(*min_err_index) = -2 - (*min_err_index);
 			///(*min_err_index) = -2;
 		}
 		else if (return_sites_error[2]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[2];
+
 			(*min_err) = return_sites_error[2];
 			(*min_err_index) = i + 2;
 			min_err_site = tmp_min_err_site;
@@ -6514,11 +6913,15 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_4(
 			&&
 			(*min_err_index) >= 0)
 		{
+			(*second_best_diff) = 0;
+
 			(*min_err_index) = -2 - (*min_err_index);
 			///(*min_err_index) = -2;
 		}
 		else if (return_sites_error[3]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[3];
+
 			(*min_err) = return_sites_error[3];
 			(*min_err_index) = i + 3;
 			min_err_site = tmp_min_err_site;
@@ -6595,11 +6998,15 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_4(
 			&&
 			(*min_err_index) >= 0)
 		{
+			(*second_best_diff) = 0;
+
 			(*min_err_index) = -2 - (*min_err_index);
 			///(*min_err_index) = -2;
 		}
 		else if (candidate_votes[i].err < (*min_err))
 		{
+			(*second_best_diff) = (*min_err) - candidate_votes[i].err;
+
 			(*min_err) = candidate_votes[i].err;
 			(*min_err_index) = i;
 			min_err_site = tmp_min_err_site;
@@ -6631,11 +7038,15 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_4(
 				&&
 				(*min_err_index) >= 0)
 			{
+				(*second_best_diff) = 0;
+
 				(*min_err_index) = -2 - (*min_err_index);
 				///(*min_err_index) = -2;
 			}
 			else if (return_sites_error[inner_i]<(*min_err))
 			{
+				(*second_best_diff) = (*min_err) - return_sites_error[inner_i];
+
 				(*min_err) = return_sites_error[inner_i];
 				(*min_err_index) = i + inner_i;
 				min_err_site = tmp_min_err_site;
@@ -6653,6 +7064,13 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_4(
 		candidate_votes[0].end_site = candidate_votes[(*min_err_index)].end_site;
 		candidate_votes[0].site = candidate_votes[(*min_err_index)].site;
 	}
+
+	/**
+	if((*second_best_diff) > error_threshold)
+	{
+		(*second_best_diff) = - 2;
+	}
+	**/
 
 
 }
@@ -7289,8 +7707,9 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_8_for_paired_end(
 inline void map_candidate_votes_mutiple_cut_end_to_end_8(
 	seed_votes* candidate_votes, bitmapper_bs_iter* candidate_votes_length,
 	bitmapper_bs_iter read_length, bitmapper_bs_iter error_threshold,
-	char* tmp_ref, char* read, __m256i* Peq_SSE, unsigned int* min_err, int* min_err_index)
+	char* tmp_ref, char* read, __m256i* Peq_SSE, unsigned int* min_err, int* min_err_index, unsigned int* second_best_diff)
 {
+	
 	bitmapper_bs_iter i = 0;
 	bitmapper_bs_iter t_length = read_length;
 	bitmapper_bs_iter p_length = read_length + 2 * error_threshold;
@@ -7321,6 +7740,10 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_8(
 	(*min_err_index) = -1;
 	bitmapper_bs_iter min_err_site = (bitmapper_bs_iter)-1;
 	bitmapper_bs_iter tmp_min_err_site;
+
+	
+
+
 
 	while (i + 8 <= *candidate_votes_length)
 	{
@@ -7432,11 +7855,15 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_8(
 			&&
 			(*min_err_index) >= 0)
 		{
+			(*second_best_diff) = 0;
+
 			(*min_err_index) = -2 - (*min_err_index);
 			///(*min_err_index) = -2;
 		}
 		else if (return_sites_error[0]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[0];
+
 			(*min_err) = return_sites_error[0];
 			(*min_err_index) = i;
 			min_err_site = tmp_min_err_site;
@@ -7454,11 +7881,15 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_8(
 			&&
 			(*min_err_index) >= 0)
 		{
+			(*second_best_diff) = 0;
+
 			(*min_err_index) = -2 - (*min_err_index);
 			//(*min_err_index) = -2;
 		}
 		else if (return_sites_error[1]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[1];
+
 			(*min_err) = return_sites_error[1];
 			(*min_err_index) = i + 1;
 			min_err_site = tmp_min_err_site;
@@ -7476,11 +7907,15 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_8(
 			&&
 			(*min_err_index) >= 0)
 		{
+			(*second_best_diff) = 0;
+
 			(*min_err_index) = -2 - (*min_err_index);
 			///(*min_err_index) = -2;
 		}
 		else if (return_sites_error[2]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[2];
+
 			(*min_err) = return_sites_error[2];
 			(*min_err_index) = i + 2;
 			min_err_site = tmp_min_err_site;
@@ -7499,11 +7934,15 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_8(
 			&&
 			(*min_err_index) >= 0)
 		{
+			(*second_best_diff) = 0;
+
 			(*min_err_index) = -2 - (*min_err_index);
 			///(*min_err_index) = -2;
 		}
 		else if (return_sites_error[3]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[3];
+
 			(*min_err) = return_sites_error[3];
 			(*min_err_index) = i + 3;
 			min_err_site = tmp_min_err_site;
@@ -7522,11 +7961,15 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_8(
 			&&
 			(*min_err_index) >= 0)
 		{
+			(*second_best_diff) = 0;
+
 			(*min_err_index) = -2 - (*min_err_index);
 			///(*min_err_index) = -2;
 		}
 		else if (return_sites_error[4]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[4];
+
 			(*min_err) = return_sites_error[4];
 			(*min_err_index) = i + 4;
 			min_err_site = tmp_min_err_site;
@@ -7545,11 +7988,15 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_8(
 			&&
 			(*min_err_index) >= 0)
 		{
+			(*second_best_diff) = 0;
+
 			(*min_err_index) = -2 - (*min_err_index);
 			///(*min_err_index) = -2;
 		}
 		else if (return_sites_error[5]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[5];
+
 			(*min_err) = return_sites_error[5];
 			(*min_err_index) = i + 5;
 			min_err_site = tmp_min_err_site;
@@ -7567,11 +8014,15 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_8(
 			&&
 			(*min_err_index) >= 0)
 		{
+			(*second_best_diff) = 0;
+
 			(*min_err_index) = -2 - (*min_err_index);
 			//(*min_err_index) = -2;
 		}
 		else if (return_sites_error[6]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[6];
+
 			(*min_err) = return_sites_error[6];
 			(*min_err_index) = i + 6;
 			min_err_site = tmp_min_err_site;
@@ -7590,11 +8041,15 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_8(
 			&&
 			(*min_err_index) >= 0)
 		{
+			(*second_best_diff) = 0;
+
 			(*min_err_index) = -2 - (*min_err_index);
 			///(*min_err_index) = -2;
 		}
 		else if (return_sites_error[7]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[7];
+
 			(*min_err) = return_sites_error[7];
 			(*min_err_index) = i + 7;
 			min_err_site = tmp_min_err_site;
@@ -7644,11 +8099,15 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_8(
 			&&
 			(*min_err_index) >= 0)
 		{
+			(*second_best_diff) = 0;
+
 			(*min_err_index) = -2 - (*min_err_index);
 			///(*min_err_index) = -2;
 		}
 		else if (candidate_votes[i].err < (*min_err))
 		{
+			(*second_best_diff) = (*min_err) - candidate_votes[i].err;
+
 			(*min_err) = candidate_votes[i].err;
 			(*min_err_index) = i;
 			min_err_site = tmp_min_err_site;
@@ -7672,13 +8131,8 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_8(
 		}
 
 
-
-
-
-
 		for (inner_i = 0; inner_i < last_length; inner_i++)
 		{
-
 			candidate_votes[i + inner_i].end_site = return_sites[inner_i];
 			candidate_votes[i + inner_i].err = return_sites_error[inner_i];
 
@@ -7690,11 +8144,15 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_8(
 				&&
 				(*min_err_index) >= 0)
 			{
+				(*second_best_diff) = 0;
+
 				(*min_err_index) = -2 - (*min_err_index);
 				///(*min_err_index) = -2;
 			}
 			else if (return_sites_error[inner_i]<(*min_err))
 			{
+				(*second_best_diff) = (*min_err) - return_sites_error[inner_i];
+
 				(*min_err) = return_sites_error[inner_i];
 				(*min_err_index) = i + inner_i;
 				min_err_site = tmp_min_err_site;
@@ -7712,6 +8170,14 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_8(
 		candidate_votes[0].end_site = candidate_votes[(*min_err_index)].end_site;
 		candidate_votes[0].site = candidate_votes[(*min_err_index)].site;
 	}
+
+	/**
+	if((*second_best_diff) > error_threshold)
+	{
+		(*second_best_diff) = - 2;
+	}
+	**/
+
 
 
 }
@@ -7736,7 +8202,7 @@ inline void map_candidate_votes_mutiple_cut_end_to_end_8(
 inline int map_candidate_votes_mutiple_end_to_end_8(
 	seed_votes* candidate_votes, bitmapper_bs_iter* candidate_votes_length,
 	bitmapper_bs_iter read_length, bitmapper_bs_iter error_threshold,
-	char* tmp_ref, char* read, __m256i* Peq_SSE, unsigned int* min_err, int* min_err_index)
+	char* tmp_ref, char* read, __m256i* Peq_SSE, unsigned int* min_err, int* min_err_index, unsigned int* second_best_diff)
 {
 	bitmapper_bs_iter i = 0;
 	bitmapper_bs_iter t_length = read_length;
@@ -7882,6 +8348,8 @@ inline int map_candidate_votes_mutiple_end_to_end_8(
 			&&
 			min_err_site != tmp_min_err_site)
 		{
+			(*second_best_diff) = 0;
+
 			if ((*min_err_index) >= 0)
 			{
 				(*min_err_index) = -2 - (*min_err_index);
@@ -7895,6 +8363,8 @@ inline int map_candidate_votes_mutiple_end_to_end_8(
 		}
 		else if (return_sites_error[0]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[0];
+
 			(*min_err) = return_sites_error[0];
 			(*min_err_index) = i;
 			min_err_site = tmp_min_err_site;
@@ -7911,6 +8381,9 @@ inline int map_candidate_votes_mutiple_end_to_end_8(
 			&&
 			min_err_site != tmp_min_err_site)
 		{
+
+			(*second_best_diff) = 0;
+
 			if ((*min_err_index) >= 0)
 			{
 				(*min_err_index) = -2 - (*min_err_index);
@@ -7923,6 +8396,8 @@ inline int map_candidate_votes_mutiple_end_to_end_8(
 		}
 		else if (return_sites_error[1]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[1];
+
 			(*min_err) = return_sites_error[1];
 			(*min_err_index) = i + 1;
 			min_err_site = tmp_min_err_site;
@@ -7938,6 +8413,8 @@ inline int map_candidate_votes_mutiple_end_to_end_8(
 			&&
 			min_err_site != tmp_min_err_site)
 		{
+			(*second_best_diff) = 0;
+
 			if ((*min_err_index) >= 0)
 			{
 				(*min_err_index) = -2 - (*min_err_index);
@@ -7950,6 +8427,8 @@ inline int map_candidate_votes_mutiple_end_to_end_8(
 		}
 		else if (return_sites_error[2]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[2];
+
 			(*min_err) = return_sites_error[2];
 			(*min_err_index) = i + 2;
 			min_err_site = tmp_min_err_site;
@@ -7967,6 +8446,9 @@ inline int map_candidate_votes_mutiple_end_to_end_8(
 			&&
 			min_err_site != tmp_min_err_site)
 		{
+			(*second_best_diff) = 0;
+
+
 			if ((*min_err_index) >= 0)
 			{
 				(*min_err_index) = -2 - (*min_err_index);
@@ -7979,6 +8461,8 @@ inline int map_candidate_votes_mutiple_end_to_end_8(
 		}
 		else if (return_sites_error[3]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[3];
+
 			(*min_err) = return_sites_error[3];
 			(*min_err_index) = i + 3;
 			min_err_site = tmp_min_err_site;
@@ -7996,6 +8480,8 @@ inline int map_candidate_votes_mutiple_end_to_end_8(
 			&&
 			min_err_site != tmp_min_err_site)
 		{
+			(*second_best_diff) = 0;
+
 			if ((*min_err_index) >= 0)
 			{
 				(*min_err_index) = -2 - (*min_err_index);
@@ -8008,6 +8494,8 @@ inline int map_candidate_votes_mutiple_end_to_end_8(
 		}
 		else if (return_sites_error[4]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[4];
+
 			(*min_err) = return_sites_error[4];
 			(*min_err_index) = i + 4;
 			min_err_site = tmp_min_err_site;
@@ -8024,6 +8512,8 @@ inline int map_candidate_votes_mutiple_end_to_end_8(
 			&&
 			min_err_site != tmp_min_err_site)
 		{
+			(*second_best_diff) = 0;
+
 			if ((*min_err_index) >= 0)
 			{
 				(*min_err_index) = -2 - (*min_err_index);
@@ -8036,6 +8526,9 @@ inline int map_candidate_votes_mutiple_end_to_end_8(
 		}
 		else if (return_sites_error[5]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[5];
+
+
 			(*min_err) = return_sites_error[5];
 			(*min_err_index) = i + 5;
 			min_err_site = tmp_min_err_site;
@@ -8053,6 +8546,8 @@ inline int map_candidate_votes_mutiple_end_to_end_8(
 			&&
 			min_err_site != tmp_min_err_site)
 		{
+			(*second_best_diff) = 0;
+
 			if ((*min_err_index) >= 0)
 			{
 				(*min_err_index) = -2 - (*min_err_index);
@@ -8065,6 +8560,8 @@ inline int map_candidate_votes_mutiple_end_to_end_8(
 		}
 		else if (return_sites_error[6]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[6];
+
 			(*min_err) = return_sites_error[6];
 			(*min_err_index) = i + 6;
 			min_err_site = tmp_min_err_site;
@@ -8082,6 +8579,8 @@ inline int map_candidate_votes_mutiple_end_to_end_8(
 			&&
 			min_err_site != tmp_min_err_site)
 		{
+			(*second_best_diff) = 0;
+
 			if ((*min_err_index) >= 0)
 			{
 				(*min_err_index) = -2 - (*min_err_index);
@@ -8094,6 +8593,8 @@ inline int map_candidate_votes_mutiple_end_to_end_8(
 		}
 		else if (return_sites_error[7]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[7];
+
 			(*min_err) = return_sites_error[7];
 			(*min_err_index) = i + 7;
 			min_err_site = tmp_min_err_site;
@@ -8136,6 +8637,8 @@ inline int map_candidate_votes_mutiple_end_to_end_8(
 			&&
 			min_err_site != tmp_min_err_site)
 		{
+			(*second_best_diff) = 0;
+			
 			if ((*min_err_index) >= 0)
 			{
 				(*min_err_index) = -2 - (*min_err_index);
@@ -8148,6 +8651,8 @@ inline int map_candidate_votes_mutiple_end_to_end_8(
 		}
 		else if (candidate_votes[i].err < (*min_err))
 		{
+			(*second_best_diff) = (*min_err) - candidate_votes[i].err;
+
 			(*min_err) = candidate_votes[i].err;
 			(*min_err_index) = i;
 			min_err_site = tmp_min_err_site;
@@ -8188,6 +8693,8 @@ inline int map_candidate_votes_mutiple_end_to_end_8(
 				&&
 				min_err_site != tmp_min_err_site)
 			{
+				(*second_best_diff) = 0;
+
 				if ((*min_err_index) >= 0)
 				{
 					(*min_err_index) = -2 - (*min_err_index);
@@ -8200,6 +8707,8 @@ inline int map_candidate_votes_mutiple_end_to_end_8(
 			}
 			else if (return_sites_error[inner_i]<(*min_err))
 			{
+				(*second_best_diff) = (*min_err) - return_sites_error[inner_i];
+
 				(*min_err) = return_sites_error[inner_i];
 				(*min_err_index) = i + inner_i;
 				min_err_site = tmp_min_err_site;
@@ -8219,6 +8728,13 @@ inline int map_candidate_votes_mutiple_end_to_end_8(
 		candidate_votes[0].end_site = candidate_votes[(*min_err_index)].end_site;
 		candidate_votes[0].site = candidate_votes[(*min_err_index)].site;
 	}
+
+	/**
+	if((*second_best_diff) > error_threshold)
+	{
+		(*second_best_diff) = - 2;
+	}
+	**/
 
 
 
@@ -8241,7 +8757,7 @@ inline int map_candidate_votes_mutiple_end_to_end_8(
 inline int map_candidate_votes_mutiple_end_to_end_4(
 	seed_votes* candidate_votes, bitmapper_bs_iter* candidate_votes_length,
 	bitmapper_bs_iter read_length, bitmapper_bs_iter error_threshold,
-	char* tmp_ref, char* read, __m256i* Peq_SSE, unsigned int* min_err, int* min_err_index)
+	char* tmp_ref, char* read, __m256i* Peq_SSE, unsigned int* min_err, int* min_err_index, unsigned int* second_best_diff)
 {
 	bitmapper_bs_iter i = 0;
 	bitmapper_bs_iter t_length = read_length;
@@ -8339,6 +8855,8 @@ inline int map_candidate_votes_mutiple_end_to_end_4(
 			&&
 			min_err_site != tmp_min_err_site)
 		{
+			(*second_best_diff) = 0;
+
 			if ((*min_err_index) >= 0)
 			{
 				(*min_err_index) = -2 - (*min_err_index);
@@ -8352,6 +8870,8 @@ inline int map_candidate_votes_mutiple_end_to_end_4(
 		}
 		else if (return_sites_error[0]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[0];
+
 			(*min_err) = return_sites_error[0];
 			(*min_err_index) = i;
 			min_err_site = tmp_min_err_site;
@@ -8374,6 +8894,8 @@ inline int map_candidate_votes_mutiple_end_to_end_4(
 			&&
 			min_err_site != tmp_min_err_site)
 		{
+			(*second_best_diff) = 0;
+
 			if ((*min_err_index) >= 0)
 			{
 				(*min_err_index) = -2 - (*min_err_index);
@@ -8387,6 +8909,8 @@ inline int map_candidate_votes_mutiple_end_to_end_4(
 		}
 		else if (return_sites_error[1]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[1];
+
 			(*min_err) = return_sites_error[1];
 			(*min_err_index) = i + 1;
 			min_err_site = tmp_min_err_site;
@@ -8408,6 +8932,8 @@ inline int map_candidate_votes_mutiple_end_to_end_4(
 			&&
 			min_err_site != tmp_min_err_site)
 		{
+			(*second_best_diff) = 0;
+
 			if ((*min_err_index) >= 0)
 			{
 				(*min_err_index) = -2 - (*min_err_index);
@@ -8421,6 +8947,8 @@ inline int map_candidate_votes_mutiple_end_to_end_4(
 		}
 		else if (return_sites_error[2]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[2];
+
 			(*min_err) = return_sites_error[2];
 			(*min_err_index) = i + 2;
 			min_err_site = tmp_min_err_site;
@@ -8444,6 +8972,8 @@ inline int map_candidate_votes_mutiple_end_to_end_4(
 			&&
 			min_err_site != tmp_min_err_site)
 		{
+			(*second_best_diff) = 0;
+
 			if ((*min_err_index) >= 0)
 			{
 				(*min_err_index) = -2 - (*min_err_index);
@@ -8457,6 +8987,8 @@ inline int map_candidate_votes_mutiple_end_to_end_4(
 		}
 		else if (return_sites_error[3]<(*min_err))
 		{
+			(*second_best_diff) = (*min_err) - return_sites_error[3];
+
 			(*min_err) = return_sites_error[3];
 			(*min_err_index) = i + 3;
 			min_err_site = tmp_min_err_site;
@@ -8519,6 +9051,8 @@ inline int map_candidate_votes_mutiple_end_to_end_4(
 			&&
 			min_err_site != tmp_min_err_site)
 		{
+			(*second_best_diff) = 0;
+
 			if ((*min_err_index) >= 0)
 			{
 				(*min_err_index) = -2 - (*min_err_index);
@@ -8531,6 +9065,8 @@ inline int map_candidate_votes_mutiple_end_to_end_4(
 		}
 		else if (candidate_votes[i].err < (*min_err))
 		{
+			(*second_best_diff) = (*min_err) - candidate_votes[i].err;
+
 			(*min_err) = candidate_votes[i].err;
 			(*min_err_index) = i;
 			min_err_site = tmp_min_err_site;
@@ -8568,6 +9104,8 @@ inline int map_candidate_votes_mutiple_end_to_end_4(
 				&&
 				min_err_site != tmp_min_err_site)
 			{
+				(*second_best_diff) = 0;
+
 				if ((*min_err_index) >= 0)
 				{
 					(*min_err_index) = -2 - (*min_err_index);
@@ -8580,6 +9118,8 @@ inline int map_candidate_votes_mutiple_end_to_end_4(
 			}
 			else if (return_sites_error[inner_i]<(*min_err))
 			{
+				(*second_best_diff) = (*min_err) - return_sites_error[inner_i];
+
 				(*min_err) = return_sites_error[inner_i];
 				(*min_err_index) = i + inner_i;
 				min_err_site = tmp_min_err_site;
@@ -8604,6 +9144,13 @@ inline int map_candidate_votes_mutiple_end_to_end_4(
 		candidate_votes[0].end_site = candidate_votes[(*min_err_index)].end_site;
 		candidate_votes[0].site = candidate_votes[(*min_err_index)].site;
 	}
+
+	/**
+	if((*second_best_diff) > error_threshold)
+	{
+		(*second_best_diff) = - 2;
+	}
+	**/
 
 
 	/**
@@ -8906,7 +9453,7 @@ inline void directly_output_read1_return_buffer_unmapped_PE(char* name, char* re
 inline void directly_output_read1_return_buffer(char* name, char* read, char* r_read, char* qulity,
 	map_result* result, map_result* another_result, int read_length, int matched_length, int another_matched_length,
 	Output_buffer_sub_block* sub_block, int paired_end_distance,
-	bam_phrase* bam_groups, int output_mask)
+	bam_phrase* bam_groups, int output_mask, int mapq)
 {
 
 	if (bam_output == 0)
@@ -8959,6 +9506,7 @@ inline void directly_output_read1_return_buffer(char* name, char* read, char* r_
 		sub_block->buffer[sub_block->length] = '\t';
 		sub_block->length++;
 
+		/**
 		sub_block->buffer[sub_block->length] = '2';
 		sub_block->length++;
 
@@ -8967,6 +9515,9 @@ inline void directly_output_read1_return_buffer(char* name, char* read, char* r_
 
 		sub_block->buffer[sub_block->length] = '5';
 		sub_block->length++;
+		**/
+		output_to_buffer_int(sub_block, mapq);
+	
 
 		sub_block->buffer[sub_block->length] = '\t';
 		sub_block->length++;
@@ -9228,6 +9779,7 @@ inline void directly_output_read1_return_buffer(char* name, char* read, char* r_
 		sub_block->buffer[sub_block->length] = '\t';
 		sub_block->length++;
 
+		/**
 		sub_block->buffer[sub_block->length] = '2';
 		sub_block->length++;
 
@@ -9236,6 +9788,8 @@ inline void directly_output_read1_return_buffer(char* name, char* read, char* r_
 
 		sub_block->buffer[sub_block->length] = '5';
 		sub_block->length++;
+		**/
+		output_to_buffer_int(sub_block, mapq);
 
 		sub_block->buffer[sub_block->length] = '\t';
 		sub_block->length++;
@@ -9983,7 +10537,7 @@ inline void directly_output_unmapped_PE(char* name, char* read, char* r_read, ch
 inline void directly_output_read1(char* name, char* read, char* r_read, char* qulity,
 	map_result* result, map_result* another_result, int read_length, int matched_length, int another_matched_length,
 	int paired_end_distance, bam_output_cell* cell,
-	Output_buffer_sub_block* sub_block, int output_mask)
+	Output_buffer_sub_block* sub_block, int output_mask, int mapq)
 {
 
 	if (bam_output == 0)
@@ -10019,7 +10573,10 @@ inline void directly_output_read1(char* name, char* read, char* r_read, char* qu
 
 		fprintf(schema_out_fp, "%llu\t", result->site);
 
-		fprintf(schema_out_fp, "255\t");
+		///fprintf(schema_out_fp, "255\t");
+		fprintf(schema_out_fp, "%d\t", mapq);
+
+		
 
 		fprintf(schema_out_fp, "%s\t", result->cigar);
 
@@ -10153,6 +10710,7 @@ inline void directly_output_read1(char* name, char* read, char* r_read, char* qu
 		sub_block->buffer[sub_block->length] = '\t';
 		sub_block->length++;
 
+		/**
 		sub_block->buffer[sub_block->length] = '2';
 		sub_block->length++;
 
@@ -10161,6 +10719,8 @@ inline void directly_output_read1(char* name, char* read, char* r_read, char* qu
 
 		sub_block->buffer[sub_block->length] = '5';
 		sub_block->length++;
+		**/
+		output_to_buffer_int(sub_block, mapq);
 
 		sub_block->buffer[sub_block->length] = '\t';
 		sub_block->length++;
@@ -10362,7 +10922,7 @@ inline void directly_output_read1(char* name, char* read, char* r_read, char* qu
 inline void directly_output_read2_return_buffer(char* name, char* read, char* r_read, char* qulity,
 	map_result* result, map_result* another_result, int read_length, int matched_length, int another_matched_length,
 	Output_buffer_sub_block* sub_block, int paired_end_distance,
-	bam_phrase* bam_groups, int output_mask)
+	bam_phrase* bam_groups, int output_mask, int mapq)
 {
 
 	if (bam_output == 0)
@@ -10417,6 +10977,7 @@ inline void directly_output_read2_return_buffer(char* name, char* read, char* r_
 		sub_block->buffer[sub_block->length] = '\t';
 		sub_block->length++;
 
+		/**
 		sub_block->buffer[sub_block->length] = '2';
 		sub_block->length++;
 
@@ -10425,6 +10986,9 @@ inline void directly_output_read2_return_buffer(char* name, char* read, char* r_
 
 		sub_block->buffer[sub_block->length] = '5';
 		sub_block->length++;
+		**/
+		output_to_buffer_int(sub_block, mapq);
+	
 
 		sub_block->buffer[sub_block->length] = '\t';
 		sub_block->length++;
@@ -10690,7 +11254,7 @@ inline void directly_output_read2_return_buffer(char* name, char* read, char* r_
 		//上面扩容时有32的余量，所以下面\t不需要检查了
 		sub_block->buffer[sub_block->length] = '\t';
 		sub_block->length++;
-
+		/**
 		sub_block->buffer[sub_block->length] = '2';
 		sub_block->length++;
 
@@ -10699,6 +11263,8 @@ inline void directly_output_read2_return_buffer(char* name, char* read, char* r_
 
 		sub_block->buffer[sub_block->length] = '5';
 		sub_block->length++;
+		**/
+		output_to_buffer_int(sub_block, mapq);
 
 		sub_block->buffer[sub_block->length] = '\t';
 		sub_block->length++;
@@ -10928,7 +11494,7 @@ inline void directly_output_read2_return_buffer(char* name, char* read, char* r_
 inline void directly_output_read2(char* name, char* read, char* r_read, char* qulity,
 	map_result* result, map_result* another_result, int read_length, int matched_length, int another_matched_length,
 	int paired_end_distance, bam_output_cell* cell,
-	Output_buffer_sub_block* sub_block, int output_mask)
+	Output_buffer_sub_block* sub_block, int output_mask, int mapq)
 {
 
 	if (bam_output == 0)
@@ -10967,7 +11533,9 @@ inline void directly_output_read2(char* name, char* read, char* r_read, char* qu
 
 		fprintf(schema_out_fp, "%llu\t", result->site);
 
-		fprintf(schema_out_fp, "255\t");
+		///fprintf(schema_out_fp, "255\t");
+		fprintf(schema_out_fp, "%d\t", mapq);
+
 
 		fprintf(schema_out_fp, "%s\t", result->cigar);
 
@@ -11116,6 +11684,7 @@ inline void directly_output_read2(char* name, char* read, char* r_read, char* qu
 		sub_block->buffer[sub_block->length] = '\t';
 		sub_block->length++;
 
+		/**
 		sub_block->buffer[sub_block->length] = '2';
 		sub_block->length++;
 
@@ -11124,6 +11693,9 @@ inline void directly_output_read2(char* name, char* read, char* r_read, char* qu
 
 		sub_block->buffer[sub_block->length] = '5';
 		sub_block->length++;
+		**/
+		output_to_buffer_int(sub_block, mapq);
+	
 
 		sub_block->buffer[sub_block->length] = '\t';
 		sub_block->length++;
@@ -11353,7 +11925,6 @@ inline void directly_output_read2(char* name, char* read, char* r_read, char* qu
 
 
 
-
 inline void output_sam_end_to_end(char* name, char* read, char* r_read, char* qulity,
 	bitmapper_bs_iter site,
 	bitmapper_bs_iter end_site,
@@ -11361,7 +11932,7 @@ inline void output_sam_end_to_end(char* name, char* read, char* r_read, char* qu
 	int err, char* best_cigar, int read_length,
 	bam_output_cell* cell,
 	Output_buffer_sub_block* sub_block,
-	int* map_among_references, int output_mask)
+	int* map_among_references, int output_mask, int mapq)
 {
 	(*map_among_references) = 0;
 
@@ -11432,7 +12003,7 @@ inline void output_sam_end_to_end(char* name, char* read, char* r_read, char* qu
 
 		fprintf(schema_out_fp, "%llu\t", map_location);
 
-		fprintf(schema_out_fp, "255\t");
+		fprintf(schema_out_fp, "%d\t", mapq);
 
 		fprintf(schema_out_fp, "%s\t", best_cigar);
 
@@ -11574,6 +12145,7 @@ inline void output_sam_end_to_end(char* name, char* read, char* r_read, char* qu
 
 
 		///result_string << "255\t";
+		/**
 		sub_block->buffer[sub_block->length] = '2';
 		sub_block->length++;
 
@@ -11582,6 +12154,9 @@ inline void output_sam_end_to_end(char* name, char* read, char* r_read, char* qu
 
 		sub_block->buffer[sub_block->length] = '5';
 		sub_block->length++;
+		**/
+		output_to_buffer_int(sub_block, mapq);
+	
 
 		sub_block->buffer[sub_block->length] = '\t';
 		sub_block->length++;
@@ -12023,7 +12598,7 @@ inline void output_sam_end_to_end_output_buffer(char* name, char* read, char* r_
 	bitmapper_bs_iter end_site,
 	bitmapper_bs_iter start_site,
 	int err, char* best_cigar, int read_length, Output_buffer_sub_block* sub_block,
-	bam_phrase* bam_groups, int* map_among_references, int output_mode)
+	bam_phrase* bam_groups, int* map_among_references, int output_mode, int mapq)
 {
 	(*map_among_references) = 0;
 
@@ -12111,7 +12686,7 @@ inline void output_sam_end_to_end_output_buffer(char* name, char* read, char* r_
 		sub_block->buffer[sub_block->length] = '\t';
 		sub_block->length++;
 
-
+		/**
 		///result_string << "255\t";
 		sub_block->buffer[sub_block->length] = '2';
 		sub_block->length++;
@@ -12121,7 +12696,9 @@ inline void output_sam_end_to_end_output_buffer(char* name, char* read, char* r_
 
 		sub_block->buffer[sub_block->length] = '5';
 		sub_block->length++;
-
+		**/
+		output_to_buffer_int(sub_block, mapq);
+		//上面扩容时有32的余量，所以下面\t不需要检查了
 		sub_block->buffer[sub_block->length] = '\t';
 		sub_block->length++;
 
@@ -12331,6 +12908,7 @@ inline void output_sam_end_to_end_output_buffer(char* name, char* read, char* r_
 
 
 			///result_string << "255\t";
+			/**
 			sub_block->buffer[sub_block->length] = '2';
 			sub_block->length++;
 
@@ -12339,9 +12917,11 @@ inline void output_sam_end_to_end_output_buffer(char* name, char* read, char* r_
 
 			sub_block->buffer[sub_block->length] = '5';
 			sub_block->length++;
-
+			**/
+			output_to_buffer_int(sub_block, mapq);
 			sub_block->buffer[sub_block->length] = '\t';
 			sub_block->length++;
+			
 
 
 			///result_string << best_cigar << "\t";
@@ -12637,7 +13217,7 @@ inline void output_sam_end_to_end_pbat_output_buffer(char* name, char* read, cha
 	bitmapper_bs_iter end_site,
 	bitmapper_bs_iter start_site,
 	int err, char* best_cigar, int read_length, Output_buffer_sub_block* sub_block,
-	bam_phrase* bam_groups, int* map_among_references, int output_mode)
+	bam_phrase* bam_groups, int* map_among_references, int output_mode, int mapq)
 {
 
 	(*map_among_references) = 0;
@@ -12749,7 +13329,7 @@ inline void output_sam_end_to_end_pbat_output_buffer(char* name, char* read, cha
 		sub_block->buffer[sub_block->length] = '\t';
 		sub_block->length++;
 
-
+		/**
 		sub_block->buffer[sub_block->length] = '2';
 		sub_block->length++;
 
@@ -12758,6 +13338,9 @@ inline void output_sam_end_to_end_pbat_output_buffer(char* name, char* read, cha
 
 		sub_block->buffer[sub_block->length] = '5';
 		sub_block->length++;
+		**/
+		output_to_buffer_int(sub_block, mapq);
+	
 
 		sub_block->buffer[sub_block->length] = '\t';
 		sub_block->length++;
@@ -12975,7 +13558,7 @@ inline void output_sam_end_to_end_pbat_output_buffer(char* name, char* read, cha
 		sub_block->buffer[sub_block->length] = '\t';
 		sub_block->length++;
 
-
+		/**
 		sub_block->buffer[sub_block->length] = '2';
 		sub_block->length++;
 
@@ -12984,6 +13567,9 @@ inline void output_sam_end_to_end_pbat_output_buffer(char* name, char* read, cha
 
 		sub_block->buffer[sub_block->length] = '5';
 		sub_block->length++;
+		**/
+		output_to_buffer_int(sub_block, mapq);
+	
 
 		sub_block->buffer[sub_block->length] = '\t';
 		sub_block->length++;
@@ -13118,7 +13704,7 @@ inline void output_sam_end_to_end_pbat(char* name, char* read, char* r_read, cha
 	bitmapper_bs_iter start_site,
 	int err, char* best_cigar, int read_length,
 	bam_output_cell* cell,
-	Output_buffer_sub_block* sub_block, int* map_among_references, int output_mode)
+	Output_buffer_sub_block* sub_block, int* map_among_references, int output_mode, int mapq)
 {
 
 	(*map_among_references) = 0;
@@ -13205,7 +13791,8 @@ inline void output_sam_end_to_end_pbat(char* name, char* read, char* r_read, cha
 
 		fprintf(schema_out_fp, "%llu\t", map_location);
 
-		fprintf(schema_out_fp, "255\t");
+		///fprintf(schema_out_fp, "255\t");
+		fprintf(schema_out_fp, "%d\t", mapq);
 
 		fprintf(schema_out_fp, "%s\t", best_cigar);
 
@@ -13371,6 +13958,7 @@ inline void output_sam_end_to_end_pbat(char* name, char* read, char* r_read, cha
 		sub_block->length++;
 
 
+		/**
 		sub_block->buffer[sub_block->length] = '2';
 		sub_block->length++;
 
@@ -13379,6 +13967,8 @@ inline void output_sam_end_to_end_pbat(char* name, char* read, char* r_read, cha
 
 		sub_block->buffer[sub_block->length] = '5';
 		sub_block->length++;
+		**/
+		output_to_buffer_int(sub_block, mapq);
 
 		sub_block->buffer[sub_block->length] = '\t';
 		sub_block->length++;
@@ -13837,6 +14427,15 @@ inline void calculate_cigar_end_to_end(
 	unsigned int* error)
 {
 
+
+
+	
+
+
+
+	
+
+
 	int i = 0;
 	char pre_ciga = 100;
 	int pre_ciga_length = 0;
@@ -13983,13 +14582,14 @@ inline void calculate_cigar_end_to_end(
 	
 	score = score + ((*error) - gap_length)*mp;
 
-	/**
-	trim_Ns_new(pattern, p_length, text, t_length, errthold, error, start_site, end_site, 
-		*end_site, score, mp, np, cigar);
-	**/
+	
+	///trim_Ns_new(pattern, p_length, text, t_length, errthold, error, start_site, end_site, *end_site, score, mp, np, cigar);
+	
 
+	
 	trim_Ns_new_all(pattern, p_length, text, t_length, errthold, error, start_site, end_site,
 		*end_site, score, mp, np, cigar);
+	
 
 }
 
@@ -14002,7 +14602,7 @@ inline void calculate_cigar_end_to_end(
 inline int calculate_best_map_cigar_end_to_end_return(bitmapper_bs_iter* candidate_votes_length,
 	bitmapper_bs_iter read_length, bitmapper_bs_iter error_threshold, char* tmp_ref,
 	char* read, char* r_read, char* qulity, char* cigar, char* path, uint16_t* matrix, Word* matrix_bit, char* name,
-	char* best_cigar, map_result* result, int* matched_length)
+	char* best_cigar, map_result* result, int* matched_length, int need_reverse_quality)
 {
 	bitmapper_bs_iter t_length = read_length;
 	bitmapper_bs_iter p_length = read_length + 2 * error_threshold;
@@ -14012,6 +14612,7 @@ inline int calculate_best_map_cigar_end_to_end_return(bitmapper_bs_iter* candida
 
 	int start_site;
 	int path_length;
+
 
 
 
@@ -14032,19 +14633,8 @@ inline int calculate_best_map_cigar_end_to_end_return(bitmapper_bs_iter* candida
 
 		}
 
+
 		/**
-		fprintf(stderr, "\n");
-
-		fprintf(stderr, "error_threshold: %d\n", error_threshold);
-
-		fprintf(stderr, "result->err: %d\n", result->err);
-
-		fprintf(stderr, "result->end_site: %d\n", result->end_site);
-
-		fprintf(stderr, "ref :\n%s\n", tmp_ref);
-		fprintf(stderr, "read :\n%s\n", read);
-		**/
-
 		if (fast_bs_Calculate_Cigar(tmp_ref, p_length, read, t_length, error_threshold, &(result->err),
 			cigar, result->end_site, &start_site, path, &path_length, matrix_bit, &result->end_site) == 6)
 		{
@@ -14052,16 +14642,17 @@ inline int calculate_best_map_cigar_end_to_end_return(bitmapper_bs_iter* candida
 		}
 		else
 		{
-
-
-
-
 			///double start = Get_T();
 			calculate_cigar_end_to_end(result->origin_site, path, path_length, best_cigar, t_length, &start_site, &result->end_site, 
 				error_threshold, tmp_ref, p_length, read, &(result->err));
 			///total = total + Get_T() - start;
-
 		}
+		**/
+		///need modification
+		fast_recalculate_bs_Cigar(tmp_ref, p_length, read, t_length, error_threshold, result->end_site,
+		result->err, &start_site, &result->end_site, &result->err, &result->score, best_cigar, 
+		result->origin_site < _msf_refGenLength, mat, mat_diff, GapOpenPenalty, GapExtensionPenalty, 
+		MistMatchPenaltyMax, MistMatchPenaltyMin, N_Penalty, qulity, need_reverse_quality, Q_base);
 
 
 	}
@@ -14069,6 +14660,9 @@ inline int calculate_best_map_cigar_end_to_end_return(bitmapper_bs_iter* candida
 	{
 
 		///start_site = 0;
+		///need modification
+		result->score = 0;
+
 		start_site = result->end_site - t_length + 1;
 		sprintf(best_cigar, "%dM", t_length);
 
@@ -14106,13 +14700,15 @@ inline int calculate_best_map_cigar_end_to_end_output_buffer(seed_votes* candida
 	bitmapper_bs_iter read_length, bitmapper_bs_iter error_threshold, char* tmp_ref,
 	char* read, char* r_read, char* qulity, char* cigar, char* path, uint16_t* matrix, Word* matrix_bit, char* name,
 	char* best_cigar, Output_buffer_sub_block* sub_block, Methylation* methy,
-	bam_phrase* bam_groups, int* map_among_references, int output_mode)
+	bam_phrase* bam_groups, int* map_among_references, int output_mode, unsigned int second_best_diff)
 {
 	bitmapper_bs_iter t_length = read_length;
 	bitmapper_bs_iter p_length = read_length + 2 * error_threshold;
 	bitmapper_bs_iter site;
 
 
+	///need modification
+	int score;
 
 	int start_site;
 	int path_length;
@@ -14140,7 +14736,7 @@ inline int calculate_best_map_cigar_end_to_end_output_buffer(seed_votes* candida
 
 
 
-
+		/**
 		if (fast_bs_Calculate_Cigar(tmp_ref, p_length, read, t_length, error_threshold, &(candidate_votes[0].err),
 			cigar, candidate_votes[0].end_site, &start_site, path, &path_length, matrix_bit, &candidate_votes[0].end_site) == 6)
 		{
@@ -14151,16 +14747,34 @@ inline int calculate_best_map_cigar_end_to_end_output_buffer(seed_votes* candida
 			calculate_cigar_end_to_end(candidate_votes[0].site, path, path_length, best_cigar, t_length, &start_site, &candidate_votes[0].end_site, 
 				error_threshold, tmp_ref, p_length, read, &(candidate_votes[0].err));
 		}
+		**/
+
+		///need modification
+		fast_recalculate_bs_Cigar(tmp_ref, p_length, read, t_length, error_threshold, candidate_votes[0].end_site,
+		candidate_votes[0].err, &start_site, &candidate_votes[0].end_site, &candidate_votes[0].err, &score, best_cigar, 
+		candidate_votes[0].site < _msf_refGenLength, mat, mat_diff, GapOpenPenalty, GapExtensionPenalty, 
+		MistMatchPenaltyMax, MistMatchPenaltyMin, N_Penalty, qulity, 0, Q_base);
 
 	}
 	else
 	{
+		///need modification
+		score = 0;
 
 		///start_site = 0;
 		start_site = candidate_votes[0].end_site - t_length + 1;
 		sprintf(best_cigar, "%dM", t_length);
 
 	}
+
+
+	///need modification
+	int mapq = MAP_Calculation(second_best_diff, error_threshold, score, GapOpenPenalty, GapExtensionPenalty, MistMatchPenaltyMax);
+	/**
+	fprintf(stderr, "mapq: %d, second_best_diff: %llu, candidate_votes[0].err: %d, score: %d, error_threshold: %d, gapoe: %d, mis: %d\n", 
+	mapq, second_best_diff, candidate_votes[0].err, score, error_threshold, GapOpenPenalty+GapExtensionPenalty, MistMatchPenaltyMax);
+	**/
+
 
 	if (output_methy == 1)
 	{
@@ -14180,7 +14794,7 @@ inline int calculate_best_map_cigar_end_to_end_output_buffer(seed_votes* candida
 			candidate_votes[0].end_site,
 			start_site,
 			candidate_votes[0].err, best_cigar,
-			read_length, sub_block, bam_groups, map_among_references, output_mode);
+			read_length, sub_block, bam_groups, map_among_references, output_mode, mapq);
 	}
 
 	
@@ -14205,7 +14819,7 @@ inline int calculate_best_map_cigar_end_to_end_pbat_output_buffer(seed_votes* ca
 	bitmapper_bs_iter read_length, bitmapper_bs_iter error_threshold, char* tmp_ref,
 	char* read, char* r_read, char* qulity, char* cigar, char* path, uint16_t* matrix, Word* matrix_bit, char* name,
 	char* best_cigar, Output_buffer_sub_block* sub_block, Methylation* methy,
-	bam_phrase* bam_groups, int* map_among_references, int output_mode)
+	bam_phrase* bam_groups, int* map_among_references, int output_mode, unsigned int second_best_diff)
 {
 	bitmapper_bs_iter t_length = read_length;
 	bitmapper_bs_iter p_length = read_length + 2 * error_threshold;
@@ -14216,6 +14830,8 @@ inline int calculate_best_map_cigar_end_to_end_pbat_output_buffer(seed_votes* ca
 	int start_site;
 	int path_length;
 
+	///need modification
+	int score;
 
 
 
@@ -14239,7 +14855,7 @@ inline int calculate_best_map_cigar_end_to_end_pbat_output_buffer(seed_votes* ca
 
 
 
-
+		/**
 		if (fast_bs_Calculate_Cigar(tmp_ref, p_length, read, t_length, error_threshold, &(candidate_votes[0].err),
 			cigar, candidate_votes[0].end_site, &start_site, path, &path_length, matrix_bit, &candidate_votes[0].end_site) == 6)
 		{
@@ -14250,16 +14866,30 @@ inline int calculate_best_map_cigar_end_to_end_pbat_output_buffer(seed_votes* ca
 			calculate_cigar_end_to_end(candidate_votes[0].site, path, path_length, best_cigar, t_length, &start_site, &candidate_votes[0].end_site, 
 				error_threshold, tmp_ref, p_length, read, &(candidate_votes[0].err));
 		}
+		**/
+		///need modification
+		///quality need to be reverse
+		fast_recalculate_bs_Cigar(tmp_ref, p_length, read, t_length, error_threshold, candidate_votes[0].end_site,
+		candidate_votes[0].err, &start_site, &candidate_votes[0].end_site, &candidate_votes[0].err, &score, best_cigar, 
+		candidate_votes[0].site < _msf_refGenLength, mat, mat_diff, GapOpenPenalty, GapExtensionPenalty, 
+		MistMatchPenaltyMax, MistMatchPenaltyMin, N_Penalty, qulity, 1, Q_base);
 
 	}
 	else
 	{
 
 		///start_site = 0;
+		///need modification
+		score = 0;
+
 		start_site = candidate_votes[0].end_site - t_length + 1;
 		sprintf(best_cigar, "%dM", t_length);
 
 	}
+
+	///need modification
+	int mapq = MAP_Calculation(second_best_diff, error_threshold, score, GapOpenPenalty, GapExtensionPenalty, MistMatchPenaltyMax);
+
 
 	if (output_methy == 1)
 	{
@@ -14278,7 +14908,7 @@ inline int calculate_best_map_cigar_end_to_end_pbat_output_buffer(seed_votes* ca
 			candidate_votes[0].end_site,
 			start_site,
 			candidate_votes[0].err, best_cigar,
-			read_length, sub_block, bam_groups, map_among_references, output_mode);
+			read_length, sub_block, bam_groups, map_among_references, output_mode,mapq);
 
 	}
 
@@ -14296,20 +14926,20 @@ inline int calculate_best_map_cigar_end_to_end_pbat_output_buffer(seed_votes* ca
 
 
 
-
-
 inline int calculate_best_map_cigar_end_to_end(seed_votes* candidate_votes, bitmapper_bs_iter* candidate_votes_length,
 	bitmapper_bs_iter read_length, bitmapper_bs_iter error_threshold, char* tmp_ref,
 	char* read, char* r_read, char* qulity, char* cigar, char* path, uint16_t* matrix, Word* matrix_bit, char* name,
 	char* best_cigar, Methylation* methy, 
 	bam_output_cell* cell,
 	Output_buffer_sub_block* current_sub_buffer,
-	int *map_among_references, int output_mask)
+	int *map_among_references, int output_mask, unsigned int second_best_diff)
 {
 	bitmapper_bs_iter t_length = read_length;
 	bitmapper_bs_iter p_length = read_length + 2 * error_threshold;
 	bitmapper_bs_iter site;
 	
+	///need modification
+	int score;
 
 
 	int start_site;
@@ -14335,10 +14965,7 @@ inline int calculate_best_map_cigar_end_to_end(seed_votes* candidate_votes, bitm
 		}
 
 
-
-
-
-
+		/**
 		if (fast_bs_Calculate_Cigar(tmp_ref, p_length, read, t_length, error_threshold, &(candidate_votes[0].err),
 			cigar, candidate_votes[0].end_site, &start_site, path, &path_length, matrix_bit, &candidate_votes[0].end_site) == 6)
 		{
@@ -14346,28 +14973,38 @@ inline int calculate_best_map_cigar_end_to_end(seed_votes* candidate_votes, bitm
 		}
 		else
 		{
-
-			///fprintf(stderr, "path_length: %llu\n", path_length);
-
-			///double start = Get_T();
 			calculate_cigar_end_to_end(candidate_votes[0].site, path, path_length, best_cigar, t_length, &start_site, &candidate_votes[0].end_site, 
 				error_threshold, tmp_ref, p_length, read, &(candidate_votes[0].err));
-			///total = total + Get_T() - start;
 		}
+		**/
+	
+		///need modification
+		fast_recalculate_bs_Cigar(tmp_ref, p_length, read, t_length, error_threshold, candidate_votes[0].end_site,
+		candidate_votes[0].err, &start_site, &candidate_votes[0].end_site, &candidate_votes[0].err, &score, best_cigar, 
+		candidate_votes[0].site < _msf_refGenLength, mat, mat_diff, GapOpenPenalty, GapExtensionPenalty, 
+		MistMatchPenaltyMax, MistMatchPenaltyMin, N_Penalty, qulity, 0, Q_base);
 
 
 	}
 	else
 	{
-
 		///start_site = 0;
+		///need modification
+		score = 0;
+		
+		
 		start_site = candidate_votes[0].end_site - t_length + 1;
 		sprintf(best_cigar, "%dM", t_length);
-
 	}
 
 
 
+	///need modification
+	int mapq = MAP_Calculation(second_best_diff, error_threshold, score, GapOpenPenalty, GapExtensionPenalty, MistMatchPenaltyMax);
+	/**
+	fprintf(stderr, "mapq: %d, second_best_diff: %llu, candidate_votes[0].err: %d, score: %d, error_threshold: %d, gapoe: %d, mis: %d\n", 
+	mapq, second_best_diff, candidate_votes[0].err, score, error_threshold, GapOpenPenalty+GapExtensionPenalty, MistMatchPenaltyMax);
+	**/
 
 
 	if (output_methy == 1)
@@ -14390,7 +15027,7 @@ inline int calculate_best_map_cigar_end_to_end(seed_votes* candidate_votes, bitm
 			read_length,
 			cell,
 			current_sub_buffer,
-			map_among_references, output_mask);
+			map_among_references, output_mask, mapq);
 	}
 	
 
@@ -14412,7 +15049,8 @@ inline int calculate_best_map_cigar_end_to_end_pbat(seed_votes* candidate_votes,
 	char* read, char* r_read, char* qulity, char* cigar, char* path, uint16_t* matrix, Word* matrix_bit, char* name,
 	char* best_cigar, Methylation* methy,
 	bam_output_cell* cell,
-	Output_buffer_sub_block* current_sub_buffer, int* map_among_references, int output_mode)
+	Output_buffer_sub_block* current_sub_buffer, int* map_among_references, int output_mode,
+	unsigned int second_best_diff)
 {
 	bitmapper_bs_iter t_length = read_length;
 	bitmapper_bs_iter p_length = read_length + 2 * error_threshold;
@@ -14422,7 +15060,8 @@ inline int calculate_best_map_cigar_end_to_end_pbat(seed_votes* candidate_votes,
 
 	int start_site;
 	int path_length;
-
+	///need modification
+	int score;
 
 
 
@@ -14444,7 +15083,7 @@ inline int calculate_best_map_cigar_end_to_end_pbat(seed_votes* candidate_votes,
 
 
 
-
+		/**
 		if (fast_bs_Calculate_Cigar(tmp_ref, p_length, read, t_length, error_threshold, &(candidate_votes[0].err),
 			cigar, candidate_votes[0].end_site, &start_site, path, &path_length, matrix_bit, &candidate_votes[0].end_site) == 6)
 		{
@@ -14457,63 +15096,31 @@ inline int calculate_best_map_cigar_end_to_end_pbat(seed_votes* candidate_votes,
 				error_threshold, tmp_ref, p_length, read, &(candidate_votes[0].err));
 			///total = total + Get_T() - start;
 		}
-
-
-		/**
-		if (strcmp(name, "@SRR771401.1391") == 0)
-		{
-		fprintf(stderr, "read   : %s\n", read);
-		fprintf(stderr, "tmp_ref: %s\n", tmp_ref);
-		fprintf(stderr, "best_cigar: %s\n", best_cigar);
-		fprintf(stderr, "start_site: %llu\n", start_site);
-		fprintf(stderr, "end_site: %llu\n", candidate_votes[0].end_site);
-		fprintf(stderr, "site: %llu\n", candidate_votes[0].site);
-		fprintf(stderr, "read_length: %llu\n", read_length);
-		fprintf(stderr, "err: %llu\n", candidate_votes[0].err);
-		for (int iik = path_length - 1; iik >= 0; iik--)
-		{
-		fprintf(stderr, "%u", path[iik]);
-		}
-
-		fprintf(stderr, "\n");
-
-		}
 		**/
-
-
-
-
-		/**
-		if (strcmp(read, "AGGTTAGTGTTGAAGAGAGAAATAAAAAAAAAATAGTTTGTATAAAAATATTTGATGATATTTTGAGAAATTAAAATATGGTATAGT") == 0)
-		{
-		fprintf(stderr, "name: %s\n", name);
-		fprintf(stderr, "read: %s\n", read);
-		fprintf(stderr, "tmp_ref: %s\n", tmp_ref);
-		fprintf(stderr, "best_cigar: %s\n", best_cigar);
-		fprintf(stderr, "start_site: %d\n", start_site);
-		fprintf(stderr, "end_site: %d\n", candidate_votes[0].end_site);
-
-		for (int iik = path_length - 1; iik >= 0; iik--)
-		{
-		fprintf(stderr, "%u", path[iik]);
-		}
-
-		fprintf(stderr, "\n");
-
-		}
-		**/
-
-
+		///need modification
+		///quality need to be reverse
+		fast_recalculate_bs_Cigar(tmp_ref, p_length, read, t_length, error_threshold, candidate_votes[0].end_site,
+		candidate_votes[0].err, &start_site, &candidate_votes[0].end_site, &candidate_votes[0].err, &score, best_cigar, 
+		candidate_votes[0].site < _msf_refGenLength, mat, mat_diff, GapOpenPenalty, GapExtensionPenalty, 
+		MistMatchPenaltyMax, MistMatchPenaltyMin, N_Penalty, qulity, 1, Q_base);
 
 	}
 	else
 	{
 
 		///start_site = 0;
+		///need modification
+		score = 0;
+
 		start_site = candidate_votes[0].end_site - t_length + 1;
 		sprintf(best_cigar, "%dM", t_length);
 
 	}
+
+
+	///need modification
+	int mapq = MAP_Calculation(second_best_diff, error_threshold, score, GapOpenPenalty, GapExtensionPenalty, MistMatchPenaltyMax);
+
 
 	if (output_methy == 1)
 	{
@@ -14533,7 +15140,7 @@ inline int calculate_best_map_cigar_end_to_end_pbat(seed_votes* candidate_votes,
 			candidate_votes[0].err, best_cigar,
 			read_length,
 			cell,
-			current_sub_buffer, map_among_references, output_mode);
+			current_sub_buffer, map_among_references, output_mode, mapq);
 	}
 
 	
@@ -14637,6 +15244,7 @@ inline int try_process_unique_mismatch_end_to_end(
 	///if (*matched_length == read_length)
 	if (error == 0)
 	{
+
 		sprintf(cigar, "%dM", read_length);
 
 		if (output_methy == 1)
@@ -14658,7 +15266,7 @@ inline int try_process_unique_mismatch_end_to_end(
 				cigar, read_length,
 				cell,
 				current_sub_buffer,
-				map_among_references,0);
+				map_among_references, 0, 42);
 		}
 
 		
@@ -14778,7 +15386,7 @@ inline int try_process_unique_mismatch_end_to_end_pbat(
 					0,
 					cigar, read_length,
 					cell,
-					current_sub_buffer, map_among_references,0);
+					current_sub_buffer, map_among_references,0,42);
 			}
 
 			
@@ -14899,7 +15507,7 @@ inline int try_process_unique_mismatch_end_to_end_output_buffer(
 				read_length - 1,
 				0,
 				0,
-				cigar, read_length, sub_block, bam_groups, map_among_references, 0);
+				cigar, read_length, sub_block, bam_groups, map_among_references, 0, 42);
 		}
 
 		
@@ -15025,7 +15633,7 @@ inline int try_process_unique_mismatch_end_to_end_pbat_get_output_buffer(
 					read_length - 1,
 					0,
 					0,
-					cigar, read_length, sub_block, bam_groups, map_among_references,0);
+					cigar, read_length, sub_block, bam_groups, map_among_references,0,42);
 			}
 
 			
@@ -15166,17 +15774,24 @@ inline int new_faster_verify_pairs(int best_mapp_occ1, int best_mapp_occ2, int e
 	seed_votes* result1_array, seed_votes* result2_array,
 	long long* best_pair_1_index_return, long long* best_pair_2_index_return,
 	int inner_maxDistance_pair,
-	int inner_minDistance_pair
+	int inner_minDistance_pair,
+	unsigned int* second_best_diff
 	)
 {
 	int mapping_pair = 0;
-	int best_sum_err = 2 * error_threshold + 1;
+	///int best_sum_err = 2 * error_threshold + 1;
+	int best_sum_err = 4 * error_threshold + 2;
 	int inner_i, inner_j;
 	long long distance;
 	long long current_sum_err;
 	long long best_pair_1_index, best_pair_2_index;
 	long long first_index_i;
 	long long second_index_i;
+	///need modification
+	///change this value would result in bug
+	long long second_best_err = best_sum_err * 2;
+	///need modification
+	(*second_best_diff) = 0;
 
 	if (best_mapp_occ1 > 0 && best_mapp_occ2 > 0)
 	{
@@ -15214,6 +15829,9 @@ inline int new_faster_verify_pairs(int best_mapp_occ1, int best_mapp_occ2, int e
 
 								if (current_sum_err < best_sum_err)
 								{
+									///need modification
+									second_best_err = best_sum_err;
+
 									best_sum_err = current_sum_err;
 									best_pair_1_index = inner_i;
 									best_pair_2_index = inner_j;
@@ -15221,10 +15839,16 @@ inline int new_faster_verify_pairs(int best_mapp_occ1, int best_mapp_occ2, int e
 								}
 								else if (current_sum_err == best_sum_err)
 								{
+									///need modification
+									second_best_err = best_sum_err;
+
 									mapping_pair++;
 
 									if (best_sum_err == 0)
 									{
+										///need modification
+										(*second_best_diff) = 0;
+
 										(*best_pair_1_index_return) = best_pair_1_index;
 										(*best_pair_2_index_return) = best_pair_2_index;
 										return mapping_pair;
@@ -15269,6 +15893,9 @@ inline int new_faster_verify_pairs(int best_mapp_occ1, int best_mapp_occ2, int e
 
 								if (current_sum_err < best_sum_err)
 								{
+									///need modification
+									second_best_err = best_sum_err;
+
 									best_sum_err = current_sum_err;
 									best_pair_1_index = inner_i;
 									best_pair_2_index = inner_j;
@@ -15276,10 +15903,15 @@ inline int new_faster_verify_pairs(int best_mapp_occ1, int best_mapp_occ2, int e
 								}
 								else if (current_sum_err == best_sum_err)
 								{
+									///need modification
+									second_best_err = best_sum_err;
+
 									mapping_pair++;
 
 									if (best_sum_err == 0)
 									{
+										///need modification
+										(*second_best_diff) = 0;
 
 										(*best_pair_1_index_return) = best_pair_1_index;
 										(*best_pair_2_index_return) = best_pair_2_index;
@@ -15311,6 +15943,14 @@ inline int new_faster_verify_pairs(int best_mapp_occ1, int best_mapp_occ2, int e
 
 	}
 
+	///need modification
+	if(mapping_pair != 0)
+	{
+		///need modification
+		(*second_best_diff) = second_best_err - best_sum_err;
+	}
+	
+
 
 	(*best_pair_1_index_return) = best_pair_1_index;
 	(*best_pair_2_index_return) = best_pair_2_index;
@@ -15318,6 +15958,84 @@ inline int new_faster_verify_pairs(int best_mapp_occ1, int best_mapp_occ2, int e
 	return mapping_pair;
 }
 
+
+
+
+inline void debug_new_faster_verify_pairs_second_best_diff(int best_mapp_occ1, int best_mapp_occ2, int error_threshold,
+	seed_votes* result1_array, seed_votes* result2_array,
+	long long* best_pair_1_index_return, long long* best_pair_2_index_return,
+	int inner_maxDistance_pair,
+	int inner_minDistance_pair,
+	unsigned int second_best_diff
+	)
+{
+	int mapping_pair = 0;
+	int best_sum_err = 10 * error_threshold + 2;
+	int inner_i, inner_j;
+	long long distance;
+	long long current_sum_err;
+	long long best_pair_1_index, best_pair_2_index;
+	///need modification
+	///change this value would result in bug
+	long long second_best_err = best_sum_err * 2;
+
+
+	if (best_mapp_occ1 > 0 && best_mapp_occ2 > 0)
+	{
+
+		///外层循环是result1_array
+		for (inner_i = 0; inner_i < best_mapp_occ1; inner_i++)
+		{
+			///内层循环是result2_array
+			for (inner_j = 0; inner_j < best_mapp_occ2; inner_j++)
+			{
+				///在内层循环里，result1_array[inner_i].site是不变的
+				///变的是result2_array[inner_j].site
+				if (result1_array[inner_i].site > result2_array[inner_j].site)
+				{
+					distance = result1_array[inner_i].site - result2_array[inner_j].site;
+				}
+				else
+				{
+					distance = result2_array[inner_j].site - result1_array[inner_i].site;
+				}
+
+				if (distance<=inner_maxDistance_pair && distance >= inner_minDistance_pair)
+				{
+					mapping_pair++;
+					current_sum_err = result1_array[inner_i].err + result2_array[inner_j].err;
+					if (current_sum_err <= best_sum_err)
+					{
+						second_best_err = best_sum_err;
+						best_sum_err = current_sum_err;
+					}
+
+				}
+			}
+		}
+	}
+	///no alignment
+	if(mapping_pair == 0)
+	{
+		if(second_best_diff != 0)
+		{
+			fprintf(stderr, "error 1: second_best_diff: %d\n", second_best_diff);
+		}
+	}
+	else
+	{
+		int diff = second_best_err - best_sum_err;
+		if(diff != second_best_diff)
+		{
+			if(second_best_diff <= 2*error_threshold || diff <= 2*error_threshold)
+			{
+				fprintf(stderr, "***error 2: diff: %d, second_best_diff: %d, large_error_threshold: %d\n", 
+			diff, second_best_diff, error_threshold);
+			}
+		}
+	}
+	
+}
 
 
 
@@ -18093,7 +18811,7 @@ int Map_Pair_Seq_end_to_end_fast(int thread_id)
 	long long total_number_of_hit = 0;
 
 
-	fprintf(stdout, "Welcome to BitMapperBS!\n");
+	fprintf(stderr, "Welcome to BitMapperBS!\n");
 
 
 	int is_mutiple_map1, is_mutiple_map2;
@@ -18169,9 +18887,6 @@ int Map_Pair_Seq_end_to_end_fast(int thread_id)
 	long long debug_1 = 0, debug_2 = 0;
 
 
-	fprintf(stdout, "max_candidates_occ: %lld\n", max_candidates_occ);
-
-
 	double startTime = Get_T();
 
 	int file_flag;
@@ -18188,7 +18903,7 @@ int Map_Pair_Seq_end_to_end_fast(int thread_id)
 	long long second_seed_length1, second_seed_length2;
 	int extra_seed_flag1, extra_seed_flag2;
 	int paired_end_distance;
-
+	unsigned int second_best_diff;
 
 
 
@@ -18217,7 +18932,7 @@ int Map_Pair_Seq_end_to_end_fast(int thread_id)
 	///这里要改
 	bitmapper_bs_iter pre_unique_matched_read = (bitmapper_bs_iter)-1;
 	bitmapper_bs_iter pre_ambious_matched_read = (bitmapper_bs_iter)-1;
-	int output_mask;
+	int output_mask = 0;
 
 	//正向模式
 	i = 0;
@@ -18295,7 +19010,8 @@ int Map_Pair_Seq_end_to_end_fast(int thread_id)
 		}
 
 		best_sum_err = 2 * large_error_threshold + 1;
-
+		///need verification
+		second_best_diff = best_sum_err;
 
 
 		/*****************************有变化*********************************/
@@ -18587,7 +19303,31 @@ int Map_Pair_Seq_end_to_end_fast(int thread_id)
 		mapping_pair = new_faster_verify_pairs(best_mapp_occ1, best_mapp_occ2, large_error_threshold,
 				candidates_votes1, candidates_votes2,
 				&best_pair_1_index, &best_pair_2_index,
-				inner_maxDistance_pair, inner_minDistance_pair);
+				inner_maxDistance_pair, inner_minDistance_pair, &second_best_diff);
+
+
+
+		/**
+		debug_new_faster_verify_pairs_second_best_diff(best_mapp_occ1, best_mapp_occ2, large_error_threshold,
+				candidates_votes1, candidates_votes2,
+				&best_pair_1_index, &best_pair_2_index,
+				inner_maxDistance_pair, inner_minDistance_pair,second_best_diff);
+		
+		if(mapping_pair == 1 && second_best_diff == 0)
+		{
+			fprintf(stderr, "1 second_best_diff: %d, large_error_threshold: %d\n", second_best_diff, large_error_threshold);
+		}
+
+		if(mapping_pair > 1 && second_best_diff != 0)
+		{
+			fprintf(stderr, "2 second_best_diff: %d, large_error_threshold: %d\n", second_best_diff, large_error_threshold);
+		}
+
+		if(mapping_pair == 0 && second_best_diff != 0)
+		{
+			fprintf(stderr, "2 second_best_diff: %d, large_error_threshold: %d\n", second_best_diff, large_error_threshold);
+		}
+		**/
 		
 
 
@@ -18614,14 +19354,14 @@ int Map_Pair_Seq_end_to_end_fast(int thread_id)
 					current_read1.seq, current_read1.rseq, current_read1.qual, cigar, path, matrix, matrix_bit,
 					current_read1.name,
 					result1.cigar,
-					&result1, &matched_length1);
+					&result1, &matched_length1, 0);
 
 
 
 			}
 			else
 			{
-
+				result1.score = 0;
 				output_sam_end_to_end_return(
 					result1.origin_site,
 					result1.end_site,
@@ -18654,11 +19394,11 @@ int Map_Pair_Seq_end_to_end_fast(int thread_id)
 					current_read2.seq, current_read2.rseq, current_read2.qual, cigar, path, matrix, matrix_bit,
 					current_read2.name,
 					result2.cigar,
-					&result2, &matched_length2);
+					&result2, &matched_length2, 1);
 			}
 			else
 			{
-
+				result2.score = 0;
 				output_sam_end_to_end_return(
 					result2.origin_site,
 					result2.end_site,
@@ -18702,8 +19442,15 @@ int Map_Pair_Seq_end_to_end_fast(int thread_id)
 				total_bases = total_bases + current_read1.length + current_read2.length;
 				error_bases = error_bases + result1.err + result2.err;
 
-
-
+				///need modification
+				int mapq = MAP_Calculation(second_best_diff, error_threshold1 + error_threshold2, 
+				result1.score + result2.score, GapOpenPenalty, GapExtensionPenalty, MistMatchPenaltyMax);
+				/**
+				fprintf(stderr, "mapq: %d, second_best_diff: %d, error_threshold1: %d, error_threshold2: %d\n", 
+				mapq, second_best_diff, error_threshold1, error_threshold2);
+				fprintf(stderr, "result1.score: %d, result2.score: %d, GapOpenPenalty: %d, GapExtensionPenalty: %d, MistMatchPenaltyMax: %d\n", 
+				result1.score, result2.score, GapOpenPenalty, GapExtensionPenalty, MistMatchPenaltyMax);
+				**/
 
 				if (output_methy == 1)
 				{
@@ -18716,6 +19463,7 @@ int Map_Pair_Seq_end_to_end_fast(int thread_id)
 				}
 				else
 				{
+					/**
 					///这里要改
 					if (mapping_pair == 1)
 					{
@@ -18725,18 +19473,19 @@ int Map_Pair_Seq_end_to_end_fast(int thread_id)
 					{
 						output_mask = 0x100;
 					}
+					**/
 
 					directly_output_read1(current_read1.name, current_read1.seq, current_read1.rseq, current_read1.qual,
 						&result1, &result2, current_read1.length,
 						matched_length1, matched_length2, paired_end_distance,
 						&cell,
-						&current_sub_buffer, output_mask);
+						&current_sub_buffer, output_mask, mapq);
 
 					directly_output_read2(current_read2.name, current_read2.seq, current_read2.rseq, current_read2.qual,
 						&result2, &result1, current_read2.length,
 						matched_length2, matched_length1, paired_end_distance,
 						&cell,
-						&current_sub_buffer, output_mask);
+						&current_sub_buffer, output_mask, mapq);
 
 				}
 
@@ -19440,13 +20189,6 @@ int Map_Pair_Seq_end_to_end(int thread_id)
 
 
 
-
-
-
-
-	fprintf(stdout, "Welcome to BitMapperBS!\n");
-
-
 	int is_mutiple_map1, is_mutiple_map2;
 
 	long long distance;
@@ -19512,7 +20254,6 @@ int Map_Pair_Seq_end_to_end(int thread_id)
 	long long debug_1 = 0, debug_2 = 0;
 
 
-	fprintf(stdout, "max_candidates_occ: %lld\n", max_candidates_occ);
 
 
 	double startTime = Get_T();
@@ -19571,8 +20312,8 @@ int Map_Pair_Seq_end_to_end(int thread_id)
 	///这里要改
 	bitmapper_bs_iter pre_unique_matched_read = (bitmapper_bs_iter)-1;
 	bitmapper_bs_iter pre_ambious_matched_read = (bitmapper_bs_iter)-1;
-	int output_mask;
-
+	int output_mask = 0;
+	unsigned int second_best_diff;
 
 	
 
@@ -19653,23 +20394,9 @@ int Map_Pair_Seq_end_to_end(int thread_id)
 		}
 
 		best_sum_err = 2 * large_error_threshold + 1;
+		///need verification
+		second_best_diff = best_sum_err;
 
-		/**
-		if (i < 246982327)
-		{
-			fprintf(debug_f, "i: %llu, %s\n", i, current_read1.name);
-			fflush(debug_f);
-
-			i++;
-			continue;
-		}
-		**/
-
-		/**
-		fprintf(debug_f, "i:%llu, %s\n", i, current_read1.name);
-		fflush(debug_f);
-		**/
-		
 
 		/*****************************有变化*********************************/
 		max_length = current_read1.length;
@@ -20437,7 +21164,8 @@ int Map_Pair_Seq_end_to_end(int thread_id)
 		
 		
 		mapping_pair = 0;
-
+		///in current version, unique_best_read1 and unique_best_read2 are always -1
+		///so the following codes are not useful
 		if (unique_best_read1 != -1 && unique_best_read2 != -1)
 		{
 
@@ -20468,8 +21196,38 @@ int Map_Pair_Seq_end_to_end(int thread_id)
 			mapping_pair = new_faster_verify_pairs(best_mapp_occ1, best_mapp_occ2, large_error_threshold,
 				candidates_votes1, candidates_votes2,
 				&best_pair_1_index, &best_pair_2_index,
-				inner_maxDistance_pair, inner_minDistance_pair);
+				inner_maxDistance_pair, inner_minDistance_pair, &second_best_diff);
 		}
+		else
+		{
+			///second_best_diff > large_error_threshold means there is only one alignment
+			second_best_diff = large_error_threshold * 2 + 1;
+		}
+
+
+
+		/**
+		debug_new_faster_verify_pairs_second_best_diff(best_mapp_occ1, best_mapp_occ2, large_error_threshold,
+				candidates_votes1, candidates_votes2,
+				&best_pair_1_index, &best_pair_2_index,
+				inner_maxDistance_pair, inner_minDistance_pair,second_best_diff);
+		
+		if(mapping_pair == 1 && second_best_diff == 0)
+		{
+			fprintf(stderr, "1 second_best_diff: %d, large_error_threshold: %d\n", second_best_diff, large_error_threshold);
+		}
+
+		if(mapping_pair > 1 && second_best_diff != 0)
+		{
+			fprintf(stderr, "2 second_best_diff: %d, large_error_threshold: %d\n", second_best_diff, large_error_threshold);
+		}
+
+		if(mapping_pair == 0 && second_best_diff != 0)
+		{
+			fprintf(stderr, "2 second_best_diff: %d, large_error_threshold: %d\n", second_best_diff, large_error_threshold);
+		}
+		**/
+		
 		
 
 	end_i:
@@ -20495,14 +21253,14 @@ int Map_Pair_Seq_end_to_end(int thread_id)
 					current_read1.seq, current_read1.rseq, current_read1.qual, cigar, path, matrix, matrix_bit,
 					current_read1.name,
 					result1.cigar,
-					&result1, &matched_length1);
+					&result1, &matched_length1, 0);
 
 				
 
 			}
 			else
 			{
-
+				result1.score = 0;
 				output_sam_end_to_end_return(
 					result1.origin_site,
 					result1.end_site,
@@ -20532,11 +21290,11 @@ int Map_Pair_Seq_end_to_end(int thread_id)
 					current_read2.seq, current_read2.rseq, current_read2.qual, cigar, path, matrix, matrix_bit,
 					current_read2.name,
 					result2.cigar,
-					&result2, &matched_length2);
+					&result2, &matched_length2, 1);
 			}
 			else
 			{
-
+				result2.score = 0;
 				output_sam_end_to_end_return(
 					result2.origin_site,
 					result2.end_site,
@@ -20575,6 +21333,10 @@ int Map_Pair_Seq_end_to_end(int thread_id)
 				total_bases = total_bases + current_read1.length + current_read2.length;
 				error_bases = error_bases + result1.err + result2.err;
 
+				///need modification
+				int mapq = MAP_Calculation(second_best_diff, error_threshold1 + error_threshold2, 
+				result1.score + result2.score, GapOpenPenalty, GapExtensionPenalty, MistMatchPenaltyMax);
+
 				if (output_methy == 1)
 				{
 
@@ -20586,7 +21348,7 @@ int Map_Pair_Seq_end_to_end(int thread_id)
 				else
 				{
 
-
+					/**
 					///这里要改
 					if (mapping_pair == 1)
 					{
@@ -20596,19 +21358,20 @@ int Map_Pair_Seq_end_to_end(int thread_id)
 					{
 						output_mask = 0x100;
 					}
+					**/
 
 
 					directly_output_read1(current_read1.name, current_read1.seq, current_read1.rseq, current_read1.qual,
 						&result1, &result2, current_read1.length,
 						matched_length1, matched_length2, paired_end_distance,
 						&cell,
-						&current_sub_buffer, output_mask);
+						&current_sub_buffer, output_mask, mapq);
 
 					directly_output_read2(current_read2.name, current_read2.seq, current_read2.rseq, current_read2.qual,
 						&result2, &result1, current_read2.length,
 						matched_length2, matched_length1, paired_end_distance,
 						&cell,
-						&current_sub_buffer, output_mask);
+						&current_sub_buffer, output_mask, mapq);
 				}
 				
 				
@@ -20989,7 +21752,7 @@ void* Map_Pair_Seq_split_fast(void* arg)
 
 
 	Pair_Methylation methy;
-
+	unsigned int second_best_diff;
 	
 
 
@@ -21052,7 +21815,7 @@ void* Map_Pair_Seq_split_fast(void* arg)
 	///这里要改
 	bitmapper_bs_iter pre_unique_matched_read = (bitmapper_bs_iter)-1;
 	bitmapper_bs_iter pre_ambious_matched_read = (bitmapper_bs_iter)-1;
-	int output_mask;
+	int output_mask = 0;
 
 
 	//正向模式
@@ -21139,6 +21902,8 @@ void* Map_Pair_Seq_split_fast(void* arg)
 			}
 
 			best_sum_err = 2 * large_error_threshold + 1;
+			///need verification
+			second_best_diff = best_sum_err;
 
 
 			/*****************************有变化*********************************/
@@ -21408,7 +22173,30 @@ void* Map_Pair_Seq_split_fast(void* arg)
 			mapping_pair = new_faster_verify_pairs(best_mapp_occ1, best_mapp_occ2, large_error_threshold,
 					candidates_votes1, candidates_votes2,
 					&best_pair_1_index, &best_pair_2_index,
-					inner_maxDistance_pair, inner_minDistance_pair);
+					inner_maxDistance_pair, inner_minDistance_pair, &second_best_diff);
+
+			
+			/**
+			debug_new_faster_verify_pairs_second_best_diff(best_mapp_occ1, best_mapp_occ2, large_error_threshold,
+				candidates_votes1, candidates_votes2,
+				&best_pair_1_index, &best_pair_2_index,
+				inner_maxDistance_pair, inner_minDistance_pair,second_best_diff);
+		
+			if(mapping_pair == 1 && second_best_diff == 0)
+			{
+				fprintf(stderr, "1 second_best_diff: %d, large_error_threshold: %d\n", second_best_diff, large_error_threshold);
+			}
+
+			if(mapping_pair > 1 && second_best_diff != 0)
+			{
+				fprintf(stderr, "2 second_best_diff: %d, large_error_threshold: %d\n", second_best_diff, large_error_threshold);
+			}
+
+			if(mapping_pair == 0 && second_best_diff != 0)
+			{
+				fprintf(stderr, "2 second_best_diff: %d, large_error_threshold: %d\n", second_best_diff, large_error_threshold);
+			}
+			**/
 
 
 
@@ -21435,14 +22223,14 @@ void* Map_Pair_Seq_split_fast(void* arg)
 						read_batch1[i].seq, read_batch1[i].rseq, read_batch1[i].qual, cigar, path, matrix, matrix_bit,
 						read_batch1[i].name,
 						result1.cigar,
-						&result1, &matched_length1);
+						&result1, &matched_length1, 0);
 
 
 
 				}
 				else
 				{
-
+					result1.score = 0;
 					output_sam_end_to_end_return(
 						result1.origin_site,
 						result1.end_site,
@@ -21472,11 +22260,11 @@ void* Map_Pair_Seq_split_fast(void* arg)
 						read_batch2[i].seq, read_batch2[i].rseq, read_batch2[i].qual, cigar, path, matrix, matrix_bit,
 						read_batch2[i].name,
 						result2.cigar,
-						&result2, &matched_length2);
+						&result2, &matched_length2, 1);
 				}
 				else
 				{
-
+					result2.score = 0;
 					output_sam_end_to_end_return(
 						result2.origin_site,
 						result2.end_site,
@@ -21526,6 +22314,10 @@ void* Map_Pair_Seq_split_fast(void* arg)
 
 					total_bases = total_bases + read_batch1[i].length + read_batch2[i].length;
 					error_bases = error_bases + result1.err + result2.err;
+
+					///need modification
+					int mapq = MAP_Calculation(second_best_diff, error_threshold1 + error_threshold2, 
+					result1.score + result2.score, GapOpenPenalty, GapExtensionPenalty, MistMatchPenaltyMax);
 					
 					if (output_methy == 1)
 					{
@@ -21537,6 +22329,7 @@ void* Map_Pair_Seq_split_fast(void* arg)
 					}
 					else
 					{
+						/**
 						///这里要改
 						if (mapping_pair == 1)
 						{
@@ -21546,14 +22339,15 @@ void* Map_Pair_Seq_split_fast(void* arg)
 						{
 							output_mask = 0x100;
 						}
+						**/
 
 						directly_output_read1_return_buffer(read_batch1[i].name, read_batch1[i].seq, read_batch1[i].rseq, read_batch1[i].qual,
 							&result1, &result2, read_batch1[i].length,
-							matched_length1, matched_length2, &current_sub_buffer, paired_end_distance, &bam_buffer, output_mask);
+							matched_length1, matched_length2, &current_sub_buffer, paired_end_distance, &bam_buffer, output_mask, mapq);
 
 						directly_output_read2_return_buffer(read_batch2[i].name, read_batch2[i].seq, read_batch2[i].rseq, read_batch2[i].qual,
 							&result2, &result1, read_batch2[i].length,
-							matched_length2, matched_length1, &current_sub_buffer, paired_end_distance, &bam_buffer, output_mask);
+							matched_length2, matched_length1, &current_sub_buffer, paired_end_distance, &bam_buffer, output_mask, mapq);
 					}
 
 					
@@ -21631,7 +22425,7 @@ void* Map_Pair_Seq_split_fast(void* arg)
 	mapped_bases[thread_id] = total_bases;
 	error_mapped_bases[thread_id] = error_bases;
 
-	fprintf(stdout, "thread %d completed!\n", thread_id);
+	fprintf(stderr, "thread %d completed!\n", thread_id);
 
 
 }
@@ -21934,12 +22728,6 @@ void* Map_Pair_Seq_split(void* arg)
 
 
 
-
-
-	///fprintf(stdout, "max_candidates_occ: %lld\n", max_candidates_occ);
-
-
-
 	Read* read_batch1;
 	Read* read_batch2;
 
@@ -22027,8 +22815,8 @@ void* Map_Pair_Seq_split(void* arg)
 	///这里要改
 	bitmapper_bs_iter pre_unique_matched_read = (bitmapper_bs_iter)-1;
 	bitmapper_bs_iter pre_ambious_matched_read = (bitmapper_bs_iter)-1;
-	int output_mask;
-
+	int output_mask = 0;
+	unsigned int second_best_diff;
 
 
 	int max_length;
@@ -22129,6 +22917,8 @@ void* Map_Pair_Seq_split(void* arg)
 			}
 
 			best_sum_err = 2 * large_error_threshold + 1;
+			///need verification
+			second_best_diff = best_sum_err;
 
 			
 
@@ -22867,7 +23657,8 @@ void* Map_Pair_Seq_split(void* arg)
 
 
 			mapping_pair = 0;
-
+			///in current version, unique_best_read1 and unique_best_read2 are always -1
+			///so the following codes are not useful
 			if (unique_best_read1 != -1 && unique_best_read2 != -1)
 			{
 
@@ -22899,8 +23690,36 @@ void* Map_Pair_Seq_split(void* arg)
 				mapping_pair = new_faster_verify_pairs(best_mapp_occ1, best_mapp_occ2, large_error_threshold,
 					candidates_votes1, candidates_votes2,
 					&best_pair_1_index, &best_pair_2_index,
-					inner_maxDistance_pair, inner_minDistance_pair);
+					inner_maxDistance_pair, inner_minDistance_pair, &second_best_diff);
 			}
+			else
+			{
+				///second_best_diff > large_error_threshold means there is only one alignment
+				second_best_diff = large_error_threshold * 2 + 1;
+			}
+
+			
+			/**
+			debug_new_faster_verify_pairs_second_best_diff(best_mapp_occ1, best_mapp_occ2, large_error_threshold,
+				candidates_votes1, candidates_votes2,
+				&best_pair_1_index, &best_pair_2_index,
+				inner_maxDistance_pair, inner_minDistance_pair,second_best_diff);
+		
+			if(mapping_pair == 1 && second_best_diff == 0)
+			{
+				fprintf(stderr, "1 second_best_diff: %d, large_error_threshold: %d\n", second_best_diff, large_error_threshold);
+			}
+
+			if(mapping_pair > 1 && second_best_diff != 0)
+			{
+				fprintf(stderr, "2 second_best_diff: %d, large_error_threshold: %d\n", second_best_diff, large_error_threshold);
+			}
+
+			if(mapping_pair == 0 && second_best_diff != 0)
+			{
+				fprintf(stderr, "2 second_best_diff: %d, large_error_threshold: %d\n", second_best_diff, large_error_threshold);
+			}
+			**/
 
 
 		end_i:
@@ -22926,14 +23745,14 @@ void* Map_Pair_Seq_split(void* arg)
 						read_batch1[i].seq, read_batch1[i].rseq, read_batch1[i].qual, cigar, path, matrix, matrix_bit,
 						read_batch1[i].name,
 						result1.cigar,
-						&result1, &matched_length1);
+						&result1, &matched_length1, 0);
 
 
 
 				}
 				else
 				{
-
+					result1.score = 0;
 					output_sam_end_to_end_return(
 						result1.origin_site,
 						result1.end_site,
@@ -22963,11 +23782,11 @@ void* Map_Pair_Seq_split(void* arg)
 						read_batch2[i].seq, read_batch2[i].rseq, read_batch2[i].qual, cigar, path, matrix, matrix_bit,
 						read_batch2[i].name,
 						result2.cigar,
-						&result2, &matched_length2);
+						&result2, &matched_length2, 1);
 				}
 				else
 				{
-
+					result2.score = 0;
 					output_sam_end_to_end_return(
 						result2.origin_site,
 						result2.end_site,
@@ -23006,6 +23825,9 @@ void* Map_Pair_Seq_split(void* arg)
 					total_bases = total_bases + read_batch1[i].length + read_batch2[i].length;
 					error_bases = error_bases + result1.err + result2.err;
 
+					///need modification
+					int mapq = MAP_Calculation(second_best_diff, error_threshold1 + error_threshold2, 
+					result1.score + result2.score, GapOpenPenalty, GapExtensionPenalty, MistMatchPenaltyMax);
 
 
 					if (output_methy == 1)
@@ -23018,6 +23840,7 @@ void* Map_Pair_Seq_split(void* arg)
 					}
 					else
 					{
+						/**
 						///这里要改
 						if (mapping_pair == 1)
 						{
@@ -23027,15 +23850,16 @@ void* Map_Pair_Seq_split(void* arg)
 						{
 							output_mask = 0x100;
 						}
+						**/
 
 
 						directly_output_read1_return_buffer(read_batch1[i].name, read_batch1[i].seq, read_batch1[i].rseq, read_batch1[i].qual,
 							&result1, &result2, read_batch1[i].length,
-							matched_length1, matched_length2, &current_sub_buffer, paired_end_distance, &bam_buffer, output_mask);
+							matched_length1, matched_length2, &current_sub_buffer, paired_end_distance, &bam_buffer, output_mask, mapq);
 
 						directly_output_read2_return_buffer(read_batch2[i].name, read_batch2[i].seq, read_batch2[i].rseq, read_batch2[i].qual,
 							&result2, &result1, read_batch2[i].length,
-							matched_length2, matched_length1, &current_sub_buffer, paired_end_distance, &bam_buffer, output_mask);
+							matched_length2, matched_length1, &current_sub_buffer, paired_end_distance, &bam_buffer, output_mask, mapq);
 					}
 
 					
@@ -23107,7 +23931,7 @@ void* Map_Pair_Seq_split(void* arg)
 	mapped_bases[thread_id] = total_bases;
 	error_mapped_bases[thread_id] = error_bases;
 
-	fprintf(stdout, "thread %d completed!\n", thread_id);
+	fprintf(stderr, "thread %d completed!\n", thread_id);
 
 
 }
@@ -23262,7 +24086,7 @@ inline int output_ambiguous_exact_map(
 
 		locate_one_position_direct(locates, top + i, &tmp_SA_length, total_SA_length, *matched_length, 0);
 
-
+		///in this case, mapq should be 1
 		output_sam_end_to_end(name, read, r_read, qulity,
 			locates[0],
 			read_length - 1,
@@ -23271,7 +24095,7 @@ inline int output_ambiguous_exact_map(
 			cigar, read_length,
 			cell,
 			current_sub_buffer,
-			map_among_references, 256);
+			map_among_references, 0, 1);
 
 		///如果找到了一个匹配，就结束
 		if ((*map_among_references) == 0)
@@ -23283,6 +24107,79 @@ inline int output_ambiguous_exact_map(
 
 
 
+inline int debug_1_mismatch_score(bitmapper_bs_iter map_location, char* ref, char* read, int readLen, 
+	char* qulity, int quality_base,
+	int MistMatchPenaltyMax, int MistMatchPenaltyMin, int N_Penalty, int need_r_quality, int mismatch_site, int check_score)
+{
+	int score = 0;
+	int error = 0;
+	int i = 0;
+
+	if(map_location < _msf_refGenLength)
+	{
+		get_actuall_genome(ref, map_location, readLen);
+	}
+	else
+	{
+		get_actuall_rc_genome(ref, map_location - _msf_refGenLength, readLen);
+	}
+
+	for (i = 0; i < readLen; i++)
+	{
+		if (ref[i] != read[i])
+		{
+			if (!(read[i] == 'T' && ref[i] == 'C'))
+			{
+				if(i != mismatch_site)
+				{
+					fprintf(stderr, "mismatch_site: %d, i: %d\n", mismatch_site, i);
+				}
+
+				error++;
+
+				if(read[i] == 'N' || ref[i] == 'N')
+				{
+					score -= N_Penalty;
+				}
+				else
+				{
+					if(!need_r_quality)
+					{
+						score -= 
+						MismatchPenaltyByQuality(MistMatchPenaltyMax, MistMatchPenaltyMin, quality_base, qulity[i]);
+						///fprintf(stderr, "i: %d, qulity[i]: %d, penalty: %d\n", i, qulity[i], MismatchPenaltyByQuality(MistMatchPenaltyMax, MistMatchPenaltyMin, quality_base, qulity[i]));
+					}
+					else
+					{
+						score -= 
+						MismatchPenaltyByQuality(MistMatchPenaltyMax, MistMatchPenaltyMin, quality_base, qulity[readLen - i - 1]);
+					}
+				}
+			}
+
+
+			
+		}
+
+	}
+
+
+	if(error != 1)
+	{
+		fprintf(stderr, "(*error): %d, (*score): %d\n", error, score);
+	}
+
+	if(check_score != score)
+	{
+		fprintf(stderr, "check_score: %d, score: %d\n", check_score, score);
+	}
+
+
+}
+
+
+
+				
 
 
 
@@ -23477,7 +24374,7 @@ int Map_Single_Seq_end_to_end(int thread_id)
 		available_seed_length = bs_available_seed_length;
 	}
 
-	fprintf(stdout, "Welcome to BitMapperBS!\n");
+	fprintf(stderr, "Welcome to BitMapperBS!\n");
 
 	#if defined __AVX2__
 
@@ -23561,6 +24458,15 @@ int Map_Single_Seq_end_to_end(int thread_id)
 	long long ambiguous_index;
 
 
+	///need modification
+	unsigned int second_best_diff;
+	int one_mismatch_site;
+	/**
+	kswr_t qry;
+	init_qry_total(&qry);
+	**/
+	
+
 
 	//正向模式
 	i = 0;
@@ -23576,6 +24482,14 @@ int Map_Single_Seq_end_to_end(int thread_id)
 		///这样就避免了初始的问题, 因为初始情况下不该输出任何东西
 		if (pre_matched_read == matched_read)
 		{
+			/**
+			if(second_best_diff != 0 && map_among_references == 0)
+			{
+				fprintf(stderr, "2: second_best_diff: %d, candidate_length: %d, name: %s, current_read.length: %d\n", 
+				second_best_diff, candidate_length, current_read.name, current_read.length);
+			}
+			**/
+			
 			if (unmapped_out == 1)
 			{
 				output_sam_unmapped(current_read.name, current_read.seq, current_read.rseq, current_read.qual, 
@@ -23639,6 +24553,11 @@ int Map_Single_Seq_end_to_end(int thread_id)
 
 		map_among_references = 0;
 
+		second_best_diff = 0;
+
+		
+
+
 		/*******控制种子数量************************/
 		max_seed_number = current_read.length / 10 - 1;
 		///多用一个不重叠的种子
@@ -23684,6 +24603,8 @@ int Map_Single_Seq_end_to_end(int thread_id)
 				
 				continue;
 			}
+
+			one_mismatch_site = match_length;
 
 
 			///只有第一个seed才有可能出现这种情况
@@ -23952,6 +24873,7 @@ int Map_Single_Seq_end_to_end(int thread_id)
 
 		///这也是个特殊情况, 比较复杂....
 		///candidate_length == 2 && candidates[0] == candidates[1] 这是两个种子都指向了同一个位置
+		///1-mismatch
 		if (extra_seed_flag == 0 
 			&& 
 			(candidate_length == 1 || 
@@ -23959,7 +24881,6 @@ int Map_Single_Seq_end_to_end(int thread_id)
 			))
 		{
 			sprintf(cigar, "%dM", current_read.length);
-
 
 
 			if (output_methy == 1)
@@ -23980,6 +24901,27 @@ int Map_Single_Seq_end_to_end(int thread_id)
 			}
 			else
 			{
+
+				///need modification
+				int score = 0;
+
+				if(current_read.seq[one_mismatch_site] == 'N')
+				{
+					score -= N_Penalty;
+				}
+				else
+				{
+					score -= MismatchPenaltyByQuality(MistMatchPenaltyMax, MistMatchPenaltyMin, Q_base, current_read.qual[one_mismatch_site]);
+				}
+
+				int mapq = MAP_Calculation((unsigned int)-1, error_threshold1, score, GapOpenPenalty, GapExtensionPenalty, MistMatchPenaltyMax);
+				/**
+				debug_1_mismatch_score(candidates[0], tmp_ref, current_read.seq, current_read.length, 
+					current_read.qual, Q_base, MistMatchPenaltyMax, MistMatchPenaltyMin, N_Penalty, 0, one_mismatch_site, score);
+				**/
+				
+				
+
 				output_sam_end_to_end
 					(
 					current_read.name,
@@ -23994,7 +24936,7 @@ int Map_Single_Seq_end_to_end(int thread_id)
 					current_read.length,
 					&cell,
 					&current_sub_buffer,
-					&map_among_references,0);
+					&map_among_references, 0, mapq);
 			}
 
 
@@ -24037,10 +24979,10 @@ int Map_Single_Seq_end_to_end(int thread_id)
 				{
 				#if defined __AVX2__
 					map_candidate_votes_mutiple_cut_end_to_end_8(candidates_votes, &candidates_votes_length, current_read.length,
-						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index);
+						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 				#else
 					map_candidate_votes_mutiple_cut_end_to_end_4_sse(candidates_votes, &candidates_votes_length, current_read.length,
-						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index);
+						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 				#endif
 					
 				}
@@ -24048,10 +24990,10 @@ int Map_Single_Seq_end_to_end(int thread_id)
 				{
 				#if defined __AVX2__
 					map_candidate_votes_mutiple_cut_end_to_end_4(candidates_votes, &candidates_votes_length, current_read.length,
-						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index);
+						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 				#else
 					map_candidate_votes_mutiple_cut_end_to_end_2_sse(candidates_votes, &candidates_votes_length, current_read.length,
-						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index);
+						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 				#endif
 				}
 					
@@ -24064,10 +25006,10 @@ int Map_Single_Seq_end_to_end(int thread_id)
 				{
 				#if defined __AVX2__
 					map_candidate_votes_mutiple_end_to_end_8(candidates_votes, &candidates_votes_length, current_read.length,
-						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index);
+						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 				#else
 					map_candidate_votes_mutiple_end_to_end_4_sse(candidates_votes, &candidates_votes_length, current_read.length,
-						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index);
+						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 				#endif
 					
 				}
@@ -24075,10 +25017,10 @@ int Map_Single_Seq_end_to_end(int thread_id)
 				{
 				#if defined __AVX2__
 					map_candidate_votes_mutiple_end_to_end_4(candidates_votes, &candidates_votes_length, current_read.length,
-						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index);
+						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 				#else
 					map_candidate_votes_mutiple_end_to_end_2_sse(candidates_votes, &candidates_votes_length, current_read.length,
-						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index);
+						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 				#endif
 				}
 				
@@ -24088,7 +25030,13 @@ int Map_Single_Seq_end_to_end(int thread_id)
 
 			if (min_err_index >= 0)
 			{
-
+				/**
+				if(second_best_diff <= 0)
+				{
+					fprintf(stderr, "0: second_best_diff: %d\n", second_best_diff);
+				}
+				**/
+				
 				
 				calculate_best_map_cigar_end_to_end
 					(candidates_votes, &min_candidates_votes_length,
@@ -24097,7 +25045,9 @@ int Map_Single_Seq_end_to_end(int thread_id)
 					best_cigar, &methy,
 					&cell,
 					&current_sub_buffer,
-					&map_among_references,0);
+					&map_among_references,0,second_best_diff);
+
+				///fprintf(stderr, "map_among_references: %d\n", map_among_references);
 
 
 				if (map_among_references == 0)
@@ -24114,6 +25064,14 @@ int Map_Single_Seq_end_to_end(int thread_id)
 			}
 			else if (min_err_index != -1)
 			{
+				/**
+				if(second_best_diff != 0)
+				{
+					fprintf(stderr, "1: second_best_diff: %d\n", second_best_diff);
+				}
+				**/
+				
+
 				matched_read++;
 
 				///这里要改
@@ -24131,7 +25089,7 @@ int Map_Single_Seq_end_to_end(int thread_id)
 						best_cigar, &methy,
 						&cell,
 						&current_sub_buffer,
-						&map_among_references, 256);
+						&map_among_references, 0,second_best_diff);
 
 					if (map_among_references != 0)
 					{
@@ -24215,7 +25173,7 @@ inline int output_ambiguous_exact_map_pbat(
 
 		locate_one_position_direct(locates, top + i, &tmp_SA_length, total_SA_length, *matched_length, 0);
 
-
+		///in this case, mapq should be 1
 		output_sam_end_to_end_pbat(name, read, r_read, qulity,
 			locates[0],
 			read_length - 1,
@@ -24224,7 +25182,7 @@ inline int output_ambiguous_exact_map_pbat(
 			cigar, read_length,
 			cell,
 			current_sub_buffer,
-			map_among_references, 256);
+			map_among_references, 0, 1);
 
 		///如果找到了一个匹配，就结束
 		if ((*map_among_references) == 0)
@@ -24532,6 +25490,11 @@ int Map_Single_Seq_end_to_end_pbat(int thread_id)
 	long long ambiguous_index;
 
 
+	///need modification
+	unsigned int second_best_diff;
+	int one_mismatch_site;
+
+
 	//正向模式
 	i = 0;
 	///while (getReads_single(&current_read))
@@ -24547,6 +25510,14 @@ int Map_Single_Seq_end_to_end_pbat(int thread_id)
 		///这样就避免了初始的问题, 因为初始情况下不该输出任何东西
 		if (pre_matched_read == matched_read)
 		{
+			/**
+			if(second_best_diff != 0 && map_among_references == 0)
+			{
+				fprintf(stderr, "2: second_best_diff: %d, candidate_length: %d, name: %s, current_read.length: %d\n", 
+				second_best_diff, candidate_length, current_read.name, current_read.length);
+			}
+			**/
+
 			if (unmapped_out == 1)
 			{
 				///这个seq和rseq要逆过来
@@ -24581,14 +25552,6 @@ int Map_Single_Seq_end_to_end_pbat(int thread_id)
 		}
 
 
-
-		/**
-		if (i % 100000 == 0)
-		{
-			fprintf(stdout, "i: %llu \n", i);
-
-		}
-		**/
 
 		///fprintf(stderr, "*******\current_read.length: %llu\n", current_read.length);
 
@@ -24625,6 +25588,8 @@ int Map_Single_Seq_end_to_end_pbat(int thread_id)
 		extra_seed_flag = 1;
 
 		map_among_references = 0;
+
+		second_best_diff = 0;
 
 
 
@@ -24695,6 +25660,7 @@ int Map_Single_Seq_end_to_end_pbat(int thread_id)
 			}
 
 
+			one_mismatch_site = match_length;
 
 			
 
@@ -25069,6 +26035,27 @@ int Map_Single_Seq_end_to_end_pbat(int thread_id)
 			}
 			else
 			{
+
+				///need modification
+				int score = 0;
+				
+				if(current_read.seq[one_mismatch_site] == 'N')
+				{
+					score -= N_Penalty;
+				}
+				else
+				{
+					///seq saves the reverse complement strand of read
+					///while qual saves the forward quality
+					///and the calculation is based on seq
+					score -= MismatchPenaltyByQuality(MistMatchPenaltyMax, MistMatchPenaltyMin, Q_base, 
+					current_read.qual[current_read.length - one_mismatch_site - 1]);
+				}
+
+				int mapq = MAP_Calculation((unsigned int)-1, error_threshold1, score, GapOpenPenalty, GapExtensionPenalty, MistMatchPenaltyMax);
+
+
+
 				output_sam_end_to_end_pbat
 					(
 					current_read.name,
@@ -25082,7 +26069,7 @@ int Map_Single_Seq_end_to_end_pbat(int thread_id)
 					cigar,
 					current_read.length,
 					&cell,
-					&current_sub_buffer, &map_among_references,0);
+					&current_sub_buffer, &map_among_references,0,mapq);
 
 			}
 
@@ -25136,10 +26123,10 @@ int Map_Single_Seq_end_to_end_pbat(int thread_id)
 				{
 					#if defined __AVX2__
 					map_candidate_votes_mutiple_cut_end_to_end_8(candidates_votes, &candidates_votes_length, current_read.length,
-						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index);
+						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 					#else
 					map_candidate_votes_mutiple_cut_end_to_end_4_sse(candidates_votes, &candidates_votes_length, current_read.length,
-						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index);
+						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 					#endif
 
 
@@ -25148,10 +26135,10 @@ int Map_Single_Seq_end_to_end_pbat(int thread_id)
 				{
 					#if defined __AVX2__
 					map_candidate_votes_mutiple_cut_end_to_end_4(candidates_votes, &candidates_votes_length, current_read.length,
-						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index);
+						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 					#else
 					map_candidate_votes_mutiple_cut_end_to_end_2_sse(candidates_votes, &candidates_votes_length, current_read.length,
-						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index);
+						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 					#endif
 				}
 
@@ -25164,10 +26151,10 @@ int Map_Single_Seq_end_to_end_pbat(int thread_id)
 				{
 					#if defined __AVX2__
 					map_candidate_votes_mutiple_end_to_end_8(candidates_votes, &candidates_votes_length, current_read.length,
-						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index);
+						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 					#else
 					map_candidate_votes_mutiple_end_to_end_4_sse(candidates_votes, &candidates_votes_length, current_read.length,
-						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index);
+						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 					#endif
 
 				}
@@ -25175,10 +26162,10 @@ int Map_Single_Seq_end_to_end_pbat(int thread_id)
 				{
 					#if defined __AVX2__
 					map_candidate_votes_mutiple_end_to_end_4(candidates_votes, &candidates_votes_length, current_read.length,
-						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index);
+						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 					#else
 					map_candidate_votes_mutiple_end_to_end_2_sse(candidates_votes, &candidates_votes_length, current_read.length,
-						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index);
+						error_threshold1, tmp_ref, current_read.seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 					#endif
 				}
 
@@ -25194,7 +26181,13 @@ int Map_Single_Seq_end_to_end_pbat(int thread_id)
 			if (min_err_index >= 0)
 			{
 
-				///total_best_mapping_site++;
+				/**
+				if(second_best_diff <= 0)
+				{
+					fprintf(stderr, "0: second_best_diff: %d\n", second_best_diff);
+				}
+				**/
+				
 				
 				min_candidates_votes_length = 0;
 
@@ -25203,7 +26196,7 @@ int Map_Single_Seq_end_to_end_pbat(int thread_id)
 					current_read.length, error_threshold1, tmp_ref,
 					current_read.seq, current_read.rseq, current_read.qual, cigar, path, matrix, matrix_bit, current_read.name,
 					best_cigar, &methy, &cell,
-					&current_sub_buffer, &map_among_references, 0);
+					&current_sub_buffer, &map_among_references, 0, second_best_diff);
 
 				if (map_among_references == 0)
 				{
@@ -25224,6 +26217,18 @@ int Map_Single_Seq_end_to_end_pbat(int thread_id)
 			}
 			else
 			{
+
+				/**
+				if(second_best_diff != 0)
+				{
+					fprintf(stderr, "1: second_best_diff: %d\n", second_best_diff);
+				}
+				**/
+				
+				
+				
+
+
 				matched_read++;
 
 
@@ -25242,7 +26247,7 @@ int Map_Single_Seq_end_to_end_pbat(int thread_id)
 						best_cigar, &methy,
 						&cell,
 						&current_sub_buffer,
-						&map_among_references, 256);
+						&map_among_references, 0, second_best_diff);
 
 					if (map_among_references != 0)
 					{
@@ -25713,7 +26718,7 @@ inline int output_ambiguous_exact_map_output_buffer(
 		locate_one_position_direct(locates, top + i, &tmp_SA_length, total_SA_length, *matched_length, 0);
 
 		
-	
+		///in this case, mapq should be 1
 		output_sam_end_to_end_output_buffer(name, read, r_read, qulity,
 			locates[0],
 			read_length - 1,
@@ -25722,7 +26727,7 @@ inline int output_ambiguous_exact_map_output_buffer(
 			cigar, read_length,
 			sub_block,
 			bam_groups,
-			map_among_references, 256);
+			map_among_references, 0, 1);
 		
 
 		///如果找到了一个匹配，就结束
@@ -25946,12 +26951,6 @@ void* Map_Single_Seq_split(void* arg)
 
 	long long total_number_of_hit = 0;
 
-	/**
-	fprintf(stdout, "error_threshold: %llu\n", error_threshold);
-	fprintf(stdout, "score_threshold: %f\n", score_threshold);
-	fprintf(stdout, "edit_distance_threshold: %f\n", edit_distance_threshold);
-	fprintf(stdout, "available_seed_length: %llu\n", available_seed_length);
-	**/
 
 	int is_mutiple_map = 0;
 
@@ -26028,6 +27027,9 @@ void* Map_Single_Seq_split(void* arg)
 	int output_mask;
 	long long ambiguous_index;
 
+
+	unsigned int second_best_diff;
+	int one_mismatch_site;
 
 
 
@@ -26123,6 +27125,8 @@ void* Map_Single_Seq_split(void* arg)
 
 			map_among_references = 0;
 
+			second_best_diff = 0;
+
 
 			/*******控制种子数量************************/
 			max_seed_number = read_batch[i].length / 10 - 1;
@@ -26177,7 +27181,7 @@ void* Map_Single_Seq_split(void* arg)
 				}
 
 
-
+				one_mismatch_site = match_length;
 
 
 				///只有第一个seed才有可能出现这种情况
@@ -26523,6 +27527,25 @@ void* Map_Single_Seq_split(void* arg)
 				}
 				else
 				{
+
+					///need modification
+					int score = 0;
+
+					if(read_batch[i].seq[one_mismatch_site] == 'N')
+					{
+						score -= N_Penalty;
+					}
+					else
+					{
+						score -= MismatchPenaltyByQuality(MistMatchPenaltyMax, MistMatchPenaltyMin, Q_base, read_batch[i].qual[one_mismatch_site]);
+					}
+
+					int mapq = MAP_Calculation((unsigned int)-1, error_threshold1, score, GapOpenPenalty, GapExtensionPenalty, MistMatchPenaltyMax);
+					/**
+					debug_1_mismatch_score(candidates[0], tmp_ref, current_read.seq, current_read.length, 
+						current_read.qual, Q_base, MistMatchPenaltyMax, MistMatchPenaltyMin, N_Penalty, 0, one_mismatch_site, score);
+					**/
+
 					output_sam_end_to_end_output_buffer(
 						read_batch[i].name,
 						read_batch[i].seq,
@@ -26533,7 +27556,7 @@ void* Map_Single_Seq_split(void* arg)
 						0,
 						1,
 						cigar,
-						read_batch[i].length, &current_sub_buffer, &bam_buffer, &map_among_references, 0);
+						read_batch[i].length, &current_sub_buffer, &bam_buffer, &map_among_references, 0, mapq);
 				}
 
 				
@@ -26576,25 +27599,22 @@ void* Map_Single_Seq_split(void* arg)
 
 					if (error_threshold1 <= 15)
 					{
-
 						#if defined __AVX2__
 						map_candidate_votes_mutiple_cut_end_to_end_8(candidates_votes, &candidates_votes_length, read_batch[i].length,
-							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index);
+							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 						#else
 						map_candidate_votes_mutiple_cut_end_to_end_4_sse(candidates_votes, &candidates_votes_length, read_batch[i].length,
-							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index);
+							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 						#endif
-
-
 					}
 					else
 					{
 						#if defined __AVX2__
 						map_candidate_votes_mutiple_cut_end_to_end_4(candidates_votes, &candidates_votes_length, read_batch[i].length,
-							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index);
+							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 						#else
 						map_candidate_votes_mutiple_cut_end_to_end_2_sse(candidates_votes, &candidates_votes_length, read_batch[i].length,
-							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index);
+							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 						#endif
 					}
 
@@ -26609,10 +27629,10 @@ void* Map_Single_Seq_split(void* arg)
 					{
 						#if defined __AVX2__
 						map_candidate_votes_mutiple_end_to_end_8(candidates_votes, &candidates_votes_length, read_batch[i].length,
-							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index);
+							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 						#else
 						map_candidate_votes_mutiple_end_to_end_4_sse(candidates_votes, &candidates_votes_length, read_batch[i].length,
-							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index);
+							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 						#endif
 
 					}
@@ -26620,10 +27640,10 @@ void* Map_Single_Seq_split(void* arg)
 					{
 						#if defined __AVX2__
 						map_candidate_votes_mutiple_end_to_end_4(candidates_votes, &candidates_votes_length, read_batch[i].length,
-							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index);
+							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 						#else
 						map_candidate_votes_mutiple_end_to_end_2_sse(candidates_votes, &candidates_votes_length, read_batch[i].length,
-							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index);
+							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 						#endif
 					}
 
@@ -26644,7 +27664,8 @@ void* Map_Single_Seq_split(void* arg)
 						read_batch[i].length, error_threshold1, tmp_ref,
 						read_batch[i].seq, read_batch[i].rseq, read_batch[i].qual,
 						cigar, path, matrix, matrix_bit, read_batch[i].name,
-						best_cigar, &current_sub_buffer, &methy, &bam_buffer, &map_among_references,0);
+						best_cigar, &current_sub_buffer, &methy, &bam_buffer, &map_among_references,0,
+						second_best_diff);
 
 					if (map_among_references == 0)
 					{
@@ -26680,7 +27701,8 @@ void* Map_Single_Seq_split(void* arg)
 							read_batch[i].length, error_threshold1, tmp_ref,
 							read_batch[i].seq, read_batch[i].rseq, read_batch[i].qual,
 							cigar, path, matrix, matrix_bit, read_batch[i].name,
-							best_cigar, &current_sub_buffer, &methy, &bam_buffer, &map_among_references, 256);
+							best_cigar, &current_sub_buffer, &methy, &bam_buffer, &map_among_references, 0,
+							second_best_diff);
 
 						if (map_among_references != 0)
 						{
@@ -26766,10 +27788,8 @@ void* Map_Single_Seq_split(void* arg)
 
 
 
-	fprintf(stdout, "thread %d completed!\n", thread_id);
+	fprintf(stderr, "thread %d completed!\n", thread_id);
 
-	///这里要改
-	///fprintf(stderr, "debug_1_mismatch: %lld\n", debug_1_mismatch);
 
 }
 
@@ -26821,7 +27841,7 @@ inline int output_ambiguous_exact_map_output_buffer_pbat(
 			cigar, read_length,
 			sub_block,
 			bam_groups,
-			map_among_references, 256);
+			map_among_references, 0, 1);
 
 
 		///如果找到了一个匹配，就结束
@@ -27126,6 +28146,10 @@ void* Map_Single_Seq_split_pbat(void* arg)
 	int output_mask;
 	long long ambiguous_index;
 
+	///need modification
+	unsigned int second_best_diff;
+	int one_mismatch_site;
+
 
 
 	file_flag = 1;
@@ -27231,6 +28255,8 @@ void* Map_Single_Seq_split_pbat(void* arg)
 
 			map_among_references = 0;
 
+			second_best_diff = 0;
+
 
 
 			/*******控制种子数量************************/
@@ -27284,6 +28310,8 @@ void* Map_Single_Seq_split_pbat(void* arg)
 
 
 				}
+
+				one_mismatch_site = match_length;
 
 
 
@@ -27634,6 +28662,27 @@ void* Map_Single_Seq_split_pbat(void* arg)
 				}
 				else
 				{
+
+
+					///need modification
+					int score = 0;
+					
+					if(read_batch[i].seq[one_mismatch_site] == 'N')
+					{
+						score -= N_Penalty;
+					}
+					else
+					{
+						///seq saves the reverse complement strand of read
+						///while qual saves the forward quality
+						///and the calculation is based on seq
+						score -= MismatchPenaltyByQuality(MistMatchPenaltyMax, MistMatchPenaltyMin, Q_base, 
+						read_batch[i].qual[read_batch[i].length - one_mismatch_site - 1]);
+					}
+
+					int mapq = MAP_Calculation((unsigned int)-1, error_threshold1, score, GapOpenPenalty, GapExtensionPenalty, MistMatchPenaltyMax);
+
+
 					output_sam_end_to_end_pbat_output_buffer
 						(
 						read_batch[i].name,
@@ -27647,7 +28696,7 @@ void* Map_Single_Seq_split_pbat(void* arg)
 						cigar,
 						read_batch[i].length,
 						&current_sub_buffer,
-						&bam_buffer, &map_among_references,0);
+						&bam_buffer, &map_among_references,0,mapq);
 				}
 
 				if (map_among_references == 0)
@@ -27691,10 +28740,10 @@ void* Map_Single_Seq_split_pbat(void* arg)
 					{
 						#if defined __AVX2__
 						map_candidate_votes_mutiple_cut_end_to_end_8(candidates_votes, &candidates_votes_length, read_batch[i].length,
-							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index);
+							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 						#else
 						map_candidate_votes_mutiple_cut_end_to_end_4_sse(candidates_votes, &candidates_votes_length, read_batch[i].length,
-							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index);
+							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 						#endif
 
 
@@ -27703,10 +28752,10 @@ void* Map_Single_Seq_split_pbat(void* arg)
 					{
 						#if defined __AVX2__
 						map_candidate_votes_mutiple_cut_end_to_end_4(candidates_votes, &candidates_votes_length, read_batch[i].length,
-							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index);
+							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 						#else
 						map_candidate_votes_mutiple_cut_end_to_end_2_sse(candidates_votes, &candidates_votes_length, read_batch[i].length,
-							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index);
+							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 						#endif
 					}
 
@@ -27721,10 +28770,10 @@ void* Map_Single_Seq_split_pbat(void* arg)
 					{
 						#if defined __AVX2__
 						map_candidate_votes_mutiple_end_to_end_8(candidates_votes, &candidates_votes_length, read_batch[i].length,
-							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index);
+							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 						#else
 						map_candidate_votes_mutiple_end_to_end_4_sse(candidates_votes, &candidates_votes_length, read_batch[i].length,
-							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index);
+							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 						#endif
 
 					}
@@ -27732,10 +28781,10 @@ void* Map_Single_Seq_split_pbat(void* arg)
 					{
 						#if defined __AVX2__
 						map_candidate_votes_mutiple_end_to_end_4(candidates_votes, &candidates_votes_length, read_batch[i].length,
-							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index);
+							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 						#else
 						map_candidate_votes_mutiple_end_to_end_2_sse(candidates_votes, &candidates_votes_length, read_batch[i].length,
-							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index);
+							error_threshold1, tmp_ref, read_batch[i].seq, Peq_SSE, &min_err, &min_err_index, &second_best_diff);
 						#endif
 					}
 
@@ -27758,7 +28807,7 @@ void* Map_Single_Seq_split_pbat(void* arg)
 						read_batch[i].seq, read_batch[i].rseq, read_batch[i].qual,
 						cigar, path, matrix, matrix_bit, read_batch[i].name,
 						best_cigar, &current_sub_buffer, &methy,
-						&bam_buffer, &map_among_references,0);
+						&bam_buffer, &map_among_references,0, second_best_diff);
 
 					if (map_among_references == 0)
 					{
@@ -27796,7 +28845,7 @@ void* Map_Single_Seq_split_pbat(void* arg)
 							read_batch[i].length, error_threshold1, tmp_ref,
 							read_batch[i].seq, read_batch[i].rseq, read_batch[i].qual,
 							cigar, path, matrix, matrix_bit, read_batch[i].name,
-							best_cigar, &current_sub_buffer, &methy, &bam_buffer, &map_among_references, 256);
+							best_cigar, &current_sub_buffer, &methy, &bam_buffer, &map_among_references, 0, second_best_diff);
 
 						if (map_among_references != 0)
 						{
@@ -27886,10 +28935,8 @@ void* Map_Single_Seq_split_pbat(void* arg)
 	mapped_bases[thread_id] = total_bases;
 	error_mapped_bases[thread_id] = error_bases;
 
-	fprintf(stdout, "thread %d completed!\n", thread_id);
+	fprintf(stderr, "thread %d completed!\n", thread_id);
 
-	///这里要改
-	///fprintf(stderr, "debug_1_mismatch: %lld\n", debug_1_mismatch);
 }
 
 
@@ -28118,15 +29165,6 @@ void* input_methy_muti_threads(void*)
 			key_pos = pos1<=pos2? pos1:pos2;
 			key_pos = key_pos - methy_input_buffer.total_start;
 			sub_interval_ID = key_pos / methy_input_buffer.each_interval_length;
-			/**
-			if (key_pos > methy_input_buffer.each_buffer_interval_end[sub_interval_ID]
-				||
-				key_pos < methy_input_buffer.each_buffer_interval_start[sub_interval_ID])
-			{
-				fprintf(stdout, "ERROR!\n");
-				exit(0);
-			}
-			**/
 
 			current_interval = methy_input_buffer.intervals + sub_interval_ID;
 
@@ -28215,7 +29253,6 @@ void* input_methy_muti_threads(void*)
 
 	}
 
-	///fprintf(stdout, "Input thread has been completed\n");
 
 	
 }

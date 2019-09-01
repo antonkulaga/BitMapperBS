@@ -188,21 +188,6 @@ int inputReads_paired_directly(
 		//****************************读第一个read*************************************
 
 		/*************************处理第一个read********************************/
-		///处理read name
-		read1_length = strlen(seqList1->name);
-		///去回车
-		seqList1->name[read1_length - 1] = '\0';
-		for (j = 0; j < read1_length; j++)
-		{
-			if (seqList1->name[j] == ' ' || seqList1->name[j] == '/')
-			{
-				seqList1->name[j] = '\0';
-				break;
-			}
-		}
-
-
-
 		///处理read seq
 		read1_length = strlen(seqList1->seq);
 		///去回车
@@ -268,21 +253,6 @@ int inputReads_paired_directly(
 
 
 		/*************************处理第二个read********************************/
-		///处理read name
-		read2_length = strlen(seqList2->name);
-		///去回车
-		seqList2->name[read2_length - 1] = '\0';
-		for (j = 0; j < read2_length; j++)
-		{
-			if (seqList2->name[j] == ' ' || seqList2->name[j] == '/')
-			{
-				seqList2->name[j] = '\0';
-				break;
-			}
-		}
-
-
-
 		///处理read seq
 		read2_length = strlen(seqList2->rseq);
 		///去回车
@@ -311,6 +281,30 @@ int inputReads_paired_directly(
 
 
 
+		///处理read name
+		read1_length = strlen(seqList1->name);
+		///去回车
+		seqList1->name[read1_length - 1] = '\0';
+
+		///处理read name
+		read2_length = strlen(seqList2->name);
+		///去回车
+		seqList2->name[read2_length - 1] = '\0';
+
+
+
+		for (j = 0; j < read1_length && j < read2_length; j++)
+		{
+			if (seqList1->name[j] != seqList2->name[j]||
+				seqList1->name[j] == ' ' || 
+				seqList1->name[j] == '/'
+				)
+			{
+				seqList1->name[j] = '\0';
+				seqList2->name[j] = '\0';
+				break;
+			}
+		}
 
 		return 1;
 
@@ -331,21 +325,6 @@ inline int post_process_paired_reads(Read_buffer_pe_sub_block* curr_sub_block)
 	for (i = 0; i < curr_sub_block->sub_block_read_number; i++)
 	{
 		/*************************处理第一个read********************************/
-		///处理read name
-		seq_length1 = strlen(curr_sub_block->read1[i].name);
-		///去回车
-		curr_sub_block->read1[i].name[seq_length1 - 1] = '\0';
-		for (j = 0; j < seq_length1; j++)
-		{
-			if (curr_sub_block->read1[i].name[j] == ' ' || curr_sub_block->read1[i].name[j] == '/')
-			{
-				curr_sub_block->read1[i].name[j] = '\0';
-				break;
-			}
-		}
-
-		
-
 		///处理read seq
 		seq_length1 = strlen(curr_sub_block->read1[i].seq);
 		///去回车
@@ -376,21 +355,6 @@ inline int post_process_paired_reads(Read_buffer_pe_sub_block* curr_sub_block)
 
 
 		/*************************处理第二个read********************************/
-		///处理read name
-		seq_length2 = strlen(curr_sub_block->read2[i].name);
-		///去回车
-		curr_sub_block->read2[i].name[seq_length2 - 1] = '\0';
-		for (j = 0; j < seq_length2; j++)
-		{
-			if (curr_sub_block->read2[i].name[j] == ' ' || curr_sub_block->read2[i].name[j] == '/')
-			{
-				curr_sub_block->read2[i].name[j] = '\0';
-				break;
-			}
-		}
-
-		
-
 		///处理read seq
 		seq_length2 = strlen(curr_sub_block->read2[i].rseq);
 		///去回车
@@ -417,9 +381,28 @@ inline int post_process_paired_reads(Read_buffer_pe_sub_block* curr_sub_block)
 
 		/*************************处理第二个read********************************/
 
+		///处理read name
+		seq_length1 = strlen(curr_sub_block->read1[i].name);
+		///去回车
+		curr_sub_block->read1[i].name[seq_length1 - 1] = '\0';
+		///处理read name
+		seq_length2 = strlen(curr_sub_block->read2[i].name);
+		///去回车
+		curr_sub_block->read2[i].name[seq_length2 - 1] = '\0';
 
-
-
+		for (j = 0; j < seq_length1; j++)
+		{
+			if (
+				curr_sub_block->read1[i].name[j] != curr_sub_block->read2[i].name[j]||
+				curr_sub_block->read1[i].name[j] == ' ' || 
+				curr_sub_block->read1[i].name[j] == '/'				
+				)
+			{
+				curr_sub_block->read1[i].name[j] = '\0';
+				curr_sub_block->read2[i].name[j] = '\0';
+				break;
+			}
+		}
 
 	}
 }
@@ -807,33 +790,6 @@ int inputReads_single_directly_back(
 		///seqList1->hits[0] = 0;
 		seqList1->length = seq_length;
 
-		/**
-		///fprintf(stdout, "thread_e: %u\n",thread_e);
-
-		///if (nCnt <=thread_e)
-		if (nCnt <= seq_length*0.7)
-		{
-
-
-			seq_length = strlen(seqList1->seq);
-			//这是read编号吧，确定这是当前第几个read
-			//rseq1这个字符数组中存储了反向互补链。既要反向，又要互补
-			///reverseComplement(seq1, rseq1, seq_length);
-			//rseq1这个字符数组中存储了反向链, 只反向，不互补
-			reverse_pattern(seqList1->seq, seqList1->rseq, seq_length);
-			//hits就分配了一个字符啊，貌似仅有这一个hits[0]吧
-			//这个应该是存这个read匹配上了多少个位置，这里当然置为0了
-			seqList1->hits[0] = 0;
-
-
-			seqList1->length = seq_length;
-		}
-		else
-		{
-			//这个应该是N太多了，超过阈值了，那这个read就直接丢弃了
-			return 3;
-		}
-		**/
 
 		return 1;
 	}
@@ -1207,7 +1163,6 @@ int inputReads_single(
 		}
                 
 
-                ///fprintf(stdout, "thread_e: %u\n",thread_e);
 
 		///if (nCnt <=thread_e)
                 if (nCnt <=seq_length*0.7)
@@ -1419,7 +1374,7 @@ int inputReads_paired(
 	  }
 
 	  if (clipped == 1 || clipped == 2){
-	    fprintf(stdout, "[PE mode Warning] Sequence lengths are different,  read #%d is clipped to match.\n", clipped);
+	    fprintf(stderr, "[PE mode Warning] Sequence lengths are different,  read #%d is clipped to match.\n", clipped);
 	    clipped = 3;
 	    return 3;
 	  }
@@ -1626,13 +1581,13 @@ int initiReadAllReads(char *fileName1,
 	{
 		if (format2 == FASTQ)
 		{
-			fprintf(stdout,
+			fprintf(stderr,
 				" Read files are in FASTQ format...\n");
 		}
 
 		if (format2 == FASTQGZ)
 		{
-			fprintf(stdout,
+			fprintf(stderr,
 				" Read files are in compressed FASTQ format...\n");
 		}
 		
